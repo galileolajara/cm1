@@ -28,7 +28,7 @@ static int64_t cm1_array_const_add(int64_t lhs, int64_t rhs,
    if ((rhs > 0 && lhs > INT64_MAX - rhs) ||
        (rhs < 0 && lhs < INT64_MIN - rhs)) {
       cm1_array_const_error(token->u64.path, token->u64.row, token->u64.col,
-                            "Integer overflow in array length expression");
+                            "Integer overflow in constant expression");
    }
    return lhs + rhs;
 }
@@ -37,7 +37,7 @@ static int64_t cm1_array_const_sub(int64_t lhs, int64_t rhs,
    if ((rhs < 0 && lhs > INT64_MAX + rhs) ||
        (rhs > 0 && lhs < INT64_MIN + rhs)) {
       cm1_array_const_error(token->u64.path, token->u64.row, token->u64.col,
-                            "Integer overflow in array length expression");
+                            "Integer overflow in constant expression");
    }
    return lhs - rhs;
 }
@@ -51,7 +51,7 @@ static int64_t cm1_array_const_mul(int64_t lhs, int64_t rhs,
         (lhs < 0 && rhs > 0 && lhs < INT64_MIN / rhs) ||
         (lhs < 0 && rhs < 0 && lhs < INT64_MAX / rhs))) {
       cm1_array_const_error(token->u64.path, token->u64.row, token->u64.col,
-                            "Integer overflow in array length expression");
+                            "Integer overflow in constant expression");
    }
    return lhs * rhs;
 }
@@ -59,11 +59,11 @@ static int64_t cm1_array_const_div(int64_t lhs, int64_t rhs,
                                    const union _Tcm1_Ttoken_data *token) {
    if (rhs == 0) {
       cm1_array_const_error(token->u64.path, token->u64.row, token->u64.col,
-                            "Division by zero in array length expression");
+                            "Division by zero in constant expression");
    }
    if (lhs == INT64_MIN && rhs == -1) {
       cm1_array_const_error(token->u64.path, token->u64.row, token->u64.col,
-                            "Integer overflow in array length expression");
+                            "Integer overflow in constant expression");
    }
    return lhs / rhs;
 }
@@ -71,11 +71,11 @@ static int64_t cm1_array_const_shift(int64_t lhs, int64_t rhs, bool left,
                                      const union _Tcm1_Ttoken_data *token) {
    if (lhs < 0 || rhs < 0 || rhs >= 32) {
       cm1_array_const_error(token->u64.path, token->u64.row, token->u64.col,
-                            "Array length shifts require a nonnegative value and a shift from 0 to 31");
+                            "Integer constant shifts require a nonnegative value and a shift from 0 to 31");
    }
    if (left && (uint64_t)lhs > (UINT32_MAX >> rhs)) {
       cm1_array_const_error(token->u64.path, token->u64.row, token->u64.col,
-                            "Integer overflow in array length expression");
+                            "Integer overflow in constant expression");
    }
    return left ? (int64_t)((uint32_t)lhs << rhs) : (lhs >> rhs);
 }
@@ -152,11 +152,14 @@ decl ::= decl_func_c.
 decl ::= decl_func_cm1.
 decl ::= decl_gvar.
 decl ::= decl_aggregate.
+decl ::= decl_enum.
 decl ::= decl_typedef.
 
 decl_typedef_type ::= TYPE(t).
 { _Tcm1_Ftypedef_begin_1(t.ptr.ptr); }
 decl_typedef_type ::= aggregate_space_id(t).
+{ _Tcm1_Ftypedef_begin_1(t.ptr.ptr); }
+decl_typedef_type ::= enum_space_id(t).
 { _Tcm1_Ftypedef_begin_1(t.ptr.ptr); }
 decl_typedef ::= TYPEDEF decl_typedef_type typedef_ids SEMICOLON.
 field_declarator_first ::= type(t) ID(i) array_dims(a).
@@ -241,6 +244,42 @@ decl_aggregate_typedef_begin ::= aggregate_keyword(k).
 decl_aggregate ::= TYPEDEF decl_aggregate_typedef_begin OPEN_CURLY_BRACE aggregate_body typedef_ids SEMICOLON.
 { _Tcm1_Faggregate_end_0(); }
 
+enum_space_id ::= ENUM_SPACE_ID.
+
+enum_keyword(out) ::= ENUM(e).
+{
+   out.basic.path = e.basic.path;
+   out.basic.row = e.basic.row;
+   out.basic.col = e.basic.col;
+   out.ptr.ptr = NULL;
+}
+enum_keyword(out) ::= ENUM_SPACE_ID(e).
+{
+   out.basic.path = e.basic.path;
+   out.basic.row = e.basic.row;
+   out.basic.col = e.basic.col;
+   out.ptr.ptr = e.ptr.ptr;
+}
+
+enum_member ::= ID(i).
+{ _Tcm1_Fenum_member_4(i.basic.id, 0, 0, PATH(i)); }
+enum_member ::= ID(i) ASSIGN array_const_expr(e).
+{ _Tcm1_Fenum_member_4(i.basic.id, (int64_t)e.u64.u64, 1, PATH(i)); }
+enum_members ::= enum_member.
+enum_members ::= enum_members COMMA enum_member.
+enum_body ::= enum_members CLOSE_CURLY_BRACE.
+enum_body ::= enum_members COMMA CLOSE_CURLY_BRACE.
+enum_body_end ::= enum_body.
+{ _Tcm1_Fenum_end_0(); }
+
+decl_enum_begin ::= enum_space_id(e).
+{ _Tcm1_Fenum_begin_3(e.ptr.ptr, 0, PATH(e)); }
+decl_enum ::= decl_enum_begin OPEN_CURLY_BRACE enum_body_end aggregate_gvars_or_none SEMICOLON.
+
+decl_enum_typedef_begin ::= enum_keyword(e).
+{ _Tcm1_Fenum_begin_3(e.ptr.ptr, 1, PATH(e)); }
+decl_enum ::= TYPEDEF decl_enum_typedef_begin OPEN_CURLY_BRACE enum_body_end typedef_ids SEMICOLON.
+
 type_or_aggregate ::= TYPE.
 type_or_aggregate ::= INT64.
 type_or_aggregate ::= INT32.
@@ -254,6 +293,7 @@ type_or_aggregate ::= F32.
 type_or_aggregate ::= F64.
 type_or_aggregate ::= VOID.
 type_or_aggregate ::= aggregate_space_id.
+type_or_aggregate ::= enum_space_id.
 type(out) ::= type_or_aggregate(t) stars_or_none(s).
 {
    out.ptr.path = t.ptr.path;
@@ -337,6 +377,7 @@ lvar_declarators ::= lvar_declarators lvar_declarator.
 stmt_var ::= lvar_declarator_first lvar_declarators SEMICOLON.
 
 decl_func_args_list ::= rparen_or_curly.
+decl_func_args_list ::= VOID rparen_or_curly.
 decl_func_args_list ::= decl_func_args rparen_or_curly.
 
 rparen_or_curly ::= RPAREN.

@@ -351,6 +351,8 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
 
    *                                { string_mem[0] = l->start[0]; l->cursor = cursor; return CM1_TOKEN_END; }
    string_literal                   { l->cursor = cursor; return CM1_TOKEN_STRING; }
+   "const"                          { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 3; }
+   "static"                         { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 4; }
    "# " [^\000\n]+                  {
       l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 2;
    }
@@ -416,6 +418,8 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    "struct" spaces [a-zA-Z_][a-zA-Z0-9_]* { l->cursor = cursor; return CM1_TOKEN_STRUCT_SPACE_ID; }
    "union" / [^a-zA-Z0-9_]         { l->cursor = cursor; return CM1_TOKEN_UNION; }
    "union" spaces [a-zA-Z_][a-zA-Z0-9_]* { l->cursor = cursor; return CM1_TOKEN_UNION_SPACE_ID; }
+   "enum" / [^a-zA-Z0-9_]          { l->cursor = cursor; return CM1_TOKEN_ENUM; }
+   "enum" spaces [a-zA-Z_][a-zA-Z0-9_]* { l->cursor = cursor; return CM1_TOKEN_ENUM_SPACE_ID; }
    [a-zA-Z_][a-zA-Z0-9_]*           { l->cursor = cursor; return CM1_TOKEN_ID; }
    [a-zA-Z_][a-zA-Z0-9_]* "("       {
       if (curly_brace_depth == 0) {

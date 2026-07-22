@@ -270,13 +270,18 @@ parse(in-path'char @const[]) {
       .last-col = .col
       .row = tok.i32.row
       .col = tok.i32.col
-      if (&&, t >= #int64, t <= #void) {
+      if (&&, t >= #int64, t < #void) {
          tok.ptr.ptr = builtin-type-token(t)
          tok.ptr.ptr2 = null // Not an extern
          t = #type
+      } elif t == #void {
+         // Keep void as its own parser token so "(void)" can be
+         // distinguished from a named parameter whose type begins with void.
+         tok.ptr.ptr = builtin-type-token(t)
+         tok.ptr.ptr2 = null // Not an extern
       }
       switch t {
-         case #spaces {
+         case #spaces, #const, #static {
             // Do nothing
          }
          case #line-info {
@@ -344,22 +349,45 @@ parse(in-path'char @const[]) {
          case #struct-space-id {
             r1'rdr. = ?
             r1.ref = lex.start
-            r1.pos += 7
+            r1.pos += 6
+            loop {
+               if (&&, r1.p1[0] != '' , r1.p1[0] != ''\n, r1.p1[0] != ''\t) { break }
+               r1.pos++
+            }
             r2'rdr. = ?
             r2.ref = lex.cursor
             id' = id-get(r1.ref, r2.pos - r1.pos)
-            tok.ptr.ptr = aggregate-type-get(id, #struct)
+            tok.ptr.ptr = tag-type-get(id, #struct)
             .last-token = t
             psr.parse(t, tok)
          }
          case #union-space-id {
             r1'rdr. = ?
             r1.ref = lex.start
-            r1.pos += 6
+            r1.pos += 5
+            loop {
+               if (&&, r1.p1[0] != '' , r1.p1[0] != ''\n, r1.p1[0] != ''\t) { break }
+               r1.pos++
+            }
             r2'rdr. = ?
             r2.ref = lex.cursor
             id' = id-get(r1.ref, r2.pos - r1.pos)
-            tok.ptr.ptr = aggregate-type-get(id, #union)
+            tok.ptr.ptr = tag-type-get(id, #union)
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #enum-space-id {
+            r1'rdr. = ?
+            r1.ref = lex.start
+            r1.pos += 4
+            loop {
+               if (&&, r1.p1[0] != '' , r1.p1[0] != ''\n, r1.p1[0] != ''\t) { break }
+               r1.pos++
+            }
+            r2'rdr. = ?
+            r2.ref = lex.cursor
+            id' = id-get(r1.ref, r2.pos - r1.pos)
+            tok.ptr.ptr = tag-type-get(id, #enum)
             .last-token = t
             psr.parse(t, tok)
          }
@@ -613,7 +641,7 @@ stmt-alloc(size'usz, type'stmt-type, li'line-info)'ref {
    return r.ref
 }
 #decl-limit = #type-limit + #func-limit + #typename-limit
-enum 'decl-type[#aggregate-forward, #aggregate, #typedef-aggregate, #typedef, #typedef-name, #func-forward, #func, #gvar]'u8
+enum 'decl-type[#aggregate-forward, #aggregate, #typedef-aggregate, #enum, #typedef-enum, #typedef, #typedef-name, #func-forward, #func, #gvar]'u8
 decl-type-v'decl-type[#decl-limit]
 decl-ptr-v'ref[#decl-limit]
 decl-c'u32
@@ -775,6 +803,82 @@ aggregate-end() {
    loop i' = 0; field-c; i++ {
       field-v[i].copy-from(.field-v[i])
    }
+}
+struct 'enum-member[name'id, value'i32]
+#enum-member-limit = 1024 * 64
+enum-member-v'enum-member.[#enum-member-limit]
+enum-member-c'u32
+enum-member-start'u32
+enum-next-value'i64
+enum-begin(type'type, typedef'bool, li'line-info) {
+   if type == null {
+      type = .type-v[.type-c++]
+      type.name = #nil
+      type.kind = #enum
+      d' = .decl-c++
+      .decl-type-v[d] = #typedef-enum
+      .decl-ptr-v[d] = type
+   } else {
+      if type.kind != #enum {
+         'c1.stdout{li ": Tag '" type.name "' is not an enum\n"}
+         'c.exit(#failure)
+      }
+      if type.field-v != null {
+         'c1.stdout{li ": Redefining enum '" type.name "'\n"}
+         'c.exit(#failure)
+      }
+      d' = .decl-c++
+      .decl-type-v[d] = #enum
+      .decl-ptr-v[d] = type
+      if typedef {
+         d = .decl-c++
+         .decl-type-v[d] = #typedef
+         .decl-ptr-v[d] = type
+      }
+   }
+   .current-type = type
+   .current-stars = #0
+   .enum-member-start = .enum-member-c
+   .enum-next-value = 0
+}
+enum-member(name'id, explicit-value'i64, explicit'bool, li'line-info) {
+   loop i' = 0; .enum-member-c; i++ {
+      if .enum-member-v[i].name == name {
+         'c1.stdout{li ": Enumerator '" name "' was already declared\n"}
+         'c.exit(#failure)
+      }
+   }
+   value'i64 = .enum-next-value
+   if explicit {
+      value = explicit-value
+   }
+   if (||, value < ('i64(-2147483647) - 1), value > 'i64(2147483647)) {
+      'c1.stdout{li ": Enumerator '" name "' is outside the int32_t range\n"}
+      'c.exit(#failure)
+   }
+   if .enum-member-c == #enum-member-limit {
+      'c1.stdout{li ": Too many enumerators\n"}
+      'c.exit(#failure)
+   }
+   member' = .enum-member-v[.enum-member-c++]
+   member.name = name
+   member.value = 'i32(value)
+   .enum-next-value = value + 1
+}
+enum-end() {
+   type' = .current-type
+   member-c' = .enum-member-c - .enum-member-start
+   if member-c > 65535 {
+      'c1.stdout{"Too many enumerators in one enum\n"}
+      'c.exit(#failure)
+   }
+   type.field-c = 'u16(member-c)
+   type.enum-member-start = .enum-member-start
+   type.align = 4
+   type.size = 4
+   // A non-null value marks the tag as defined. Enum members have their own
+   // compact storage and never use this pointer as an aggregate field array.
+   type.field-v = .field-v
 }
 struct 'line-info[path'char @const[], row'u32, col'u32] {
    copy-from(li'this, src'line-info) {
@@ -979,10 +1083,13 @@ export() {
    aggregate-begin(null, false, null, false)
    aggregate-forward(null)
    aggregate-end()
+   enum-begin(null, false, null)
+   enum-member(#nil, 0, false, null)
+   enum-end()
 }
 // Integer kinds are signed/unsigned pairs ordered by storage width.  The VM
 // relies on this layout to derive signedness and size directly from the value.
-enum 'type-kind[#void, #i8, #u8, #i16, #u16, #i32, #u32, #i64, #u64, #f32, #f64, #struct, #typedef, #union]'u8 {
+enum 'type-kind[#void, #i8, #u8, #i16, #u16, #i32, #u32, #i64, #u64, #f32, #f64, #struct, #typedef, #union, #enum]'u8 {
    cp1-name(e'this)'char @const[] @cp1-name
 }
 struct 'field[name'id, stars-src'stars, stars-final'stars, type-src'type, type-final'type, offset'u32, array-dim-start'u32, array-dim-c'u32, array-size'u32] {
@@ -998,7 +1105,7 @@ struct 'field[name'id, stars-src'stars, stars-final'stars, type-src'type, type-f
       des.array-size = src.array-size
    }
 }
-struct 'type[name'id, kind'type-kind, field-c'u16, align'u8, size'u32, field-v'field.[]] {
+struct 'type[name'id, kind'type-kind, field-c'u16, align'u8, size'u32, field-v'field.[], enum-member-start'u32] {
    is-aggregate(type'this)'bool {
       return (||, type.kind == #struct, type.kind == #union)
    }
@@ -1035,7 +1142,14 @@ struct 'type[name'id, kind'type-kind, field-c'u16, align'u8, size'u32, field-v'f
    final-type(type'this, stars'stars, out-stars'stars&)'type {
       if type.kind == #typedef {
          out-stars = stars + 'stars(type.field-c)
-         return type.final-type-fast()
+         type2' = type.final-type-fast()
+         if type2.kind == #enum {
+            return .type-v[5]
+         }
+         return type2
+      } elif type.kind == #enum {
+         out-stars = stars
+         return .type-v[5]
       } else {
          out-stars = stars
          return type
@@ -1232,6 +1346,7 @@ type-storage-size(type'type, stars'stars, li'line-info)'u32 {
       case #i64 { return 8 }
       case #u64 { return 8 }
       case #f64 { return 8 }
+      case #enum { return 4 }
    }
    if type.is-aggregate() {
       if type.field-v == null {
@@ -1264,6 +1379,7 @@ type-storage-align(type'type, stars'stars, li'line-info)'u32 {
       case #i64 { return 8 }
       case #u64 { return 8 }
       case #f64 { return 8 }
+      case #enum { return 4 }
    }
    if type.is-aggregate() {
       if type.field-v == null {
@@ -1293,12 +1409,13 @@ array-decl(type'type, stars'stars, array-dims'u32[], array-dim-c'u32, li'line-in
       out-size *= dim
    }
 }
-aggregate-type-get(id'id, kind'type-kind)'type {
+tag-type-get(id'id, kind'type-kind)'type {
    loop i' = 0; .type-c; i++ {
       type' = .type-v[i]
-      if (&&, type.is-aggregate(), type.name == id) {
+      tagged' = (||, type.is-aggregate(), type.kind == #enum)
+      if (&&, tagged, type.name == id) {
          if type.kind != kind {
-            'c1.stdout{"Tag '" id "' was used as both a struct and a union\n"}
+            'c1.stdout{"Tag '" id "' was used with conflicting struct, union, or enum kinds\n"}
             'c.exit(#failure)
          }
          return type
@@ -1500,6 +1617,8 @@ output-type-name(f'c1'sprintf, type'type) {
       f.add{"struct " type.name}
    } elif type.kind == #union {
       f.add{"union " type.name}
+   } elif type.kind == #enum {
+      f.add{"enum " type.name}
    } else {
       f.add{type.name}
    }
@@ -1519,6 +1638,17 @@ output-fields(f'c1'sprintf, type'type) {
       f.add{field.stars-src ''  field.name}
       output-array-dims(f, field.array-dim-start, field.array-dim-c)
       f.add{";\n"}
+   }
+}
+output-enum-members(f'c1'sprintf, type'type) {
+   start' = type.enum-member-start
+   loop i' = 0; type.field-c; i++ {
+      member' = .enum-member-v[start + i]
+      f.add{"   " member.name " = " member.value}
+      if (i + 1) != type.field-c {
+         f.add{","}
+      }
+      f.add{"\n"}
    }
 }
 clear-memory-lexer()
@@ -1545,6 +1675,7 @@ clear-memory() {
    'c.memset(.field-v, 0, .field-c * 'field['usz])
    // field-mem-c is stored as a byte count.
    'c.memset(.field-mem-v, 0, .field-mem-c)
+   'c.memset(.enum-member-v, 0, .enum-member-c * 'enum-member['usz])
 
    'c.memset(.func-v, 0, .func-c * 'func['usz])
    'c.memset(.func-name-v, 0, .func-c * 'id['usz])
@@ -1605,6 +1736,9 @@ clear-memory() {
    .field-offset = 0
    .field-max-size = 0
    .field-max-align = 0
+   .enum-member-c = 0
+   .enum-member-start = 0
+   .enum-next-value = 0
    .func-c = 0
    .func-decl-arg-c = 0
    .func-c-idx = 0
@@ -1711,6 +1845,10 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
       type' = .type-v[.type-c++]
       type.name = id-get("uint8_t", 7)
       type.kind = #u8
+
+      tn' = .typename-c++
+      .typename-id-v[tn] = id-get("bool", 4)
+      .typename-type-v[tn] = type
    }
 
    if true {
@@ -1785,12 +1923,19 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
                output-fields(f, type)
                f.add{"};\n"}
             }
+            case #enum {
+               type'type = .decl-ptr-v[i]
+               output-type-name(f, type)
+               f.add{" {\n"}
+               output-enum-members(f, type)
+               f.add{"};\n"}
+            }
             case #gvar {
                gvar'gvar = .decl-ptr-v[i]
                type' = gvar.type-src
-               if type.is-aggregate() {
+               if (||, type.is-aggregate(), type.kind == #enum) {
                      if (&&, gvar.stars-final == #0, type.field-v == null) {
-                        'c1.stdout{gvar.info ": Struct or union '" type.name "' was used but it was never defined\n"}
+                        'c1.stdout{gvar.info ": Struct, union, or enum '" type.name "' was used but it was never defined\n"}
                         'c.exit(#failure)
                      }
                      output-type-name(f, type)
@@ -1857,10 +2002,29 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
                }
                f.add{";\n"}
             }
+            case #typedef-enum {
+               type'type = .decl-ptr-v[i]
+               f.add{"typedef enum {\n"}
+               output-enum-members(f, type)
+               f.add{"}"}
+               first' = true
+               loop (i + 1) < decl-c {
+                  if .decl-type-v[i + 1] != #typedef-name { break }
+                  i++
+                  type2'type = .decl-ptr-v[i]
+                  if first {
+                     first = false
+                     f.add{''  type2.stars() type2.name}
+                  } else {
+                     f.add{", " type2.stars() type2.name}
+                  }
+               }
+               f.add{";\n"}
+            }
             case #typedef {
                type'type = .decl-ptr-v[i]
-               stars-minus'
-               if type.is-aggregate() {
+               stars-minus'stars = #0
+               if (||, type.is-aggregate(), type.kind == #enum) {
                   f.add{"typedef "}
                   output-type-name(f, type)
                } else {

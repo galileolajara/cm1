@@ -62,6 +62,8 @@ main(arg-c'cint, arg-v'char[][])'cint {
    out-f.printf(
       '= #spaces,
       '= #line-info,
+      '= #const,
+      '= #static,
       '= ]'cint {
       '= cp1-name(e'this)'char[] @cp1-name
       '= }

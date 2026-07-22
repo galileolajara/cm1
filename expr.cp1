@@ -344,6 +344,12 @@ expr-var(name'id, li'line-info)'expr {
          return expr
       }
    }
+   loop j' = .enum-member-c; j > 0; {
+      j--
+      if .enum-member-v[j].name == name {
+         return expr-i32(.enum-member-v[j].value, li)
+      }
+   }
    'c1.stdout{expr.base ": Variable '" name "' was not found\n"}
    'c.exit(#failure)
    return null
