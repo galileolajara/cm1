@@ -283,7 +283,7 @@ parse(in-path'char @const[]) {
          tok.ptr.ptr2 = null // Not an extern
       }
       switch t {
-         case #spaces, #const, #static {
+         case #spaces, #const, #static, #inline {
             // Do nothing
          }
          case #line-info {
