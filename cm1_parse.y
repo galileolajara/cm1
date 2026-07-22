@@ -188,18 +188,36 @@ aggregate_keyword(out) ::= STRUCT(s).
    out.basic.path = s.basic.path;
    out.basic.row = s.basic.row;
    out.basic.col = s.basic.col;
-   out.basic.id = 0;
+   out.ptr.ptr = NULL;
+   out.ptr.ptr2 = NULL;
 }
 aggregate_keyword(out) ::= UNION(u).
 {
    out.basic.path = u.basic.path;
    out.basic.row = u.basic.row;
    out.basic.col = u.basic.col;
-   out.basic.id = 1;
+   out.ptr.ptr = NULL;
+   out.ptr.ptr2 = (void*)1;
+}
+aggregate_keyword(out) ::= STRUCT_SPACE_ID(s).
+{
+   out.basic.path = s.basic.path;
+   out.basic.row = s.basic.row;
+   out.basic.col = s.basic.col;
+   out.ptr.ptr = s.ptr.ptr;
+   out.ptr.ptr2 = NULL;
+}
+aggregate_keyword(out) ::= UNION_SPACE_ID(u).
+{
+   out.basic.path = u.basic.path;
+   out.basic.row = u.basic.row;
+   out.basic.col = u.basic.col;
+   out.ptr.ptr = u.ptr.ptr;
+   out.ptr.ptr2 = (void*)1;
 }
 
 decl_aggregate_begin ::= aggregate_space_id(i).
-{ _Tcm1_Faggregate_begin_3(i.ptr.ptr, 0, PATH(i)); }
+{ _Tcm1_Faggregate_begin_4(i.ptr.ptr, 0, PATH(i), 0); }
 aggregate_gvar ::= stars_for_ids(s) ID(i) array_dims(a).
 {
    _Tcm1_Fgvar_decl_7(current_type, s.basic.id, 0, i.basic.id, ARRAY_DIM_V(a), ARRAY_DIM_C(a), PATH(i));
@@ -219,7 +237,7 @@ typedef_ids ::= typedef_ids COMMA stars_for_ids(s) ID(i).
 { _Tcm1_Ftypedef_name_3(i.basic.id, s.basic.id, PATH(i)); }
 typedef_ids ::= typedef_ids COMMA stars_for_ids TYPE.
 decl_aggregate_typedef_begin ::= aggregate_keyword(k).
-{ _Tcm1_Faggregate_begin_3(NULL, k.basic.id, PATH(k)); }
+{ _Tcm1_Faggregate_begin_4(k.ptr.ptr, (size_t)k.ptr.ptr2, PATH(k), 1); }
 decl_aggregate ::= TYPEDEF decl_aggregate_typedef_begin OPEN_CURLY_BRACE aggregate_body typedef_ids SEMICOLON.
 { _Tcm1_Faggregate_end_0(); }
 

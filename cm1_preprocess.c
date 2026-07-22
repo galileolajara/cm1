@@ -22,6 +22,9 @@
 #endif
 
 char input_mem[INPUT_LIMIT];
+void* _Tcm1_Fcfg_mem_1(uint32_t size) {
+   return &input_mem[INPUT_LIMIT - size];
+}
 char output_mem[OUTPUT_LIMIT];
 
 #define PP_MACRO_STORAGE_LIMIT (INPUT_LIMIT / 8u)

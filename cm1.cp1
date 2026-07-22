@@ -218,7 +218,15 @@ include "cm1_preprocess.c" {
 parse(in-path'char @const[]) {
    include-v'char[1][]
    include-v[0] = "include"
-   in-size' = preprocess(in-path, 1, include-v, 0, null, null)
+   define-name-v'char[3][]
+   define-name-v[0] = "__CM1__"
+   define-name-v[1] = "__STDC__"
+   define-name-v[2] = "__STDC_VERSION__"
+   define-value-v'char[3][]
+   define-value-v[0] = ""
+   define-value-v[1] = ""
+   define-value-v[2] = "199901"
+   in-size' = preprocess(in-path, 1, include-v, 3, define-name-v, define-value-v)
    if in-size == 0 {
       'c1.stdout{preprocess-error-message()}
       'c.exit(#failure)
@@ -241,7 +249,8 @@ parse(in-path'char @const[]) {
       tok.i32.row = next-row
       tok.i32.col = next-col
       t' = lex.scan()
-      // 'c1.stdout{t.cp1-name() "\n"}
+      // lex-start'char[] = lex.start
+      // 'c1.stdout{t.cp1-name() " " lex-start, 10 "\n"}
       if true {
          // when reporting the row and column of tokens, skip the spaces
          pos' = lex.start
@@ -702,7 +711,7 @@ field(type'type, stars'stars, name'id, array-dims'u32[], array-dim-c'u32, li'lin
       field.offset = field-offset
    }
 }
-aggregate-begin(type'type, is-union'bool, li'line-info) {
+aggregate-begin(type'type, is-union'bool, li'line-info, typedef'bool) {
    if type == null {
       type = .type-v[.type-c++]
       type.name = #nil
@@ -726,6 +735,11 @@ aggregate-begin(type'type, is-union'bool, li'line-info) {
       d' = .decl-c++
       .decl-type-v[d] = #aggregate
       .decl-ptr-v[d] = type
+      if typedef {
+         d = .decl-c++
+         .decl-type-v[d] = #typedef-aggregate
+         .decl-ptr-v[d] = type
+      }
    }
 }
 aggregate-forward(type'type) {
@@ -962,7 +976,7 @@ export() {
    expr-var(#nil, null)
    expr-assign(null, #set, null)
    expr-cast(null, null, #0, null)
-   aggregate-begin(null, false, null)
+   aggregate-begin(null, false, null, false)
    aggregate-forward(null)
    aggregate-end()
 }
@@ -1624,6 +1638,7 @@ clear-memory() {
    .cm1-string-pos = 0
    .cm1-string-count = 0
 }
+cfg-mem(size'u32)'ref
 id-printf'id
 main(arg-c'cint, arg-v'char @const[][])'cint {
    if false {
@@ -1646,7 +1661,7 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
    }
    cfg-len' = fd.seek(0, #end)
    fd.seek(0, #set)
-   cfg-data'char[] = .input-mem
+   cfg-data'char[] = cfg-mem(cfg-len)
    fd.read(cfg-data, cfg-len)
    fd.close()
    cfg-data[cfg-len] = ''\n

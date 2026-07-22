@@ -21,17 +21,17 @@ EMSCRIPTEN_KEEPALIVE
 void* io_mem() {
    int fd = open(CM1_CFG_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
    write(fd,
-		STR_WITH_SIZE(
-		"C\n"
-		"cm1_printf_begin\n"
-		"cm1_printf_s\n"
-		"cm1_printf_d\n"
-		"cm1_printf_x\n"
-		"cm1_printf_f\n"
-		"cm1_printf_c\n"
-		"cm1_printf_end\n"
-		)
-	);
+      STR_WITH_SIZE(
+      "C\n"
+      "cm1_printf_begin\n"
+      "cm1_printf_s\n"
+      "cm1_printf_d\n"
+      "cm1_printf_x\n"
+      "cm1_printf_f\n"
+      "cm1_printf_c\n"
+      "cm1_printf_end\n"
+      )
+   );
    close(fd);
    return io_mem_v;
 }
