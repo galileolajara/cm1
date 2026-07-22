@@ -1201,6 +1201,23 @@ struct 'expr[info'line-info., type'expr-type] {
                            out-stars-bc = #0
                            return field-type
                         }
+                        if (&&, field-stars == #0, field-type.is-aggregate()) {
+                           if expr.op != #set {
+                              'c1.stdout{expr-base ": Invalid assignment type\n"}
+                              'c.exit(#failure)
+                           }
+                           bc-op(#addr-add)
+                           type' = expr.src.output(stars-c?, stars-bc?)
+                           if (||, type != field-type, stars-c != #0) {
+                              'c1.stdout{expr-base ": Type mismatch\n"}
+                              'c.exit(#failure)
+                           }
+                           bc-push-usz(field-type.size)
+                           bc-op(#copy-mem)
+                           out-stars-c = #0
+                           out-stars-bc = #1
+                           return field-type
+                        }
                         'c1.stdout{expr-base ": Field assignment is not supported for this type\n"}
                         'c.exit(#failure)
                      }

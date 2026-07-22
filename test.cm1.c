@@ -53,6 +53,9 @@ struct z test6() {
    struct z n;
    n.e = 7;
    n.t = 3;
+   uint8_t l;
+   uint8_t *m = &l;
+   *(m++) = 1;
    // printf("n.e = %u, n.t = %u\n", n.e, n.t);
    return n;
 }
