@@ -41,5 +41,14 @@ union cm1_stack_item {
 static union cm1_stack_item cm1_stack_v[CM1_STACK_LIMIT];
 static uint32_t cm1_stack_pos;
 
+static void cm1_push_f32(float value) {
+   cm1_stack_v[cm1_stack_pos].u64 = 0;
+   cm1_stack_v[cm1_stack_pos++].f32 = value;
+}
+
+static void cm1_push_f64(double value) {
+   cm1_stack_v[cm1_stack_pos++].f64 = value;
+}
+
 void cm1_init(const char* cm1_path);
 void cm1_run(uint16_t func_idx);

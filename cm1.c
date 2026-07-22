@@ -56,15 +56,6 @@
 static uint8_t* cm1_bytecode;
 static uint32_t cm1_lvar_pos;
 
-static void cm1_push_f32(float value) {
-   cm1_stack_v[cm1_stack_pos].u64 = 0;
-   cm1_stack_v[cm1_stack_pos++].f32 = value;
-}
-
-static void cm1_push_f64(double value) {
-   cm1_stack_v[cm1_stack_pos++].f64 = value;
-}
-
 typedef uint16_t cm1_unaligned_u16 __attribute__((aligned(1), may_alias));
 typedef uint32_t cm1_unaligned_u32 __attribute__((aligned(1), may_alias));
 typedef uint64_t cm1_unaligned_u64 __attribute__((aligned(1), may_alias));
