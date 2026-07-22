@@ -1,0 +1,7 @@
+'c1 = 'libcp1
+run(arg-c'cint, arg-v'char @const[][]) @process {
+   'cm1.clear-memory()
+   'c1.stdout{"Compiling...\n"}
+   'cm1.main(arg-c, arg-v)
+   'c1.stdout{"Compilation successful!\n"}
+}

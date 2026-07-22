@@ -1,0 +1,186 @@
+'c1 = 'libcp1
+'c = 'libc
+using 'cm1 {
+#func-limit = 8 * 1024
+func-v'func.[#func-limit]
+func-name-v'id[#func-limit]
+func-c'u32
+struct 'func[info'line-info., type-src'type, type-final'type, stars-src'stars, stars-final'stars, code'ref, code-len'u32, func-idx'u16, arg-start'u32, lvar-start'u32, arg-c'u8, cm1'bool] {
+   name(func'this)'id {
+      r1'rdr. = ?
+      r1.ref = .func-v
+      r2'rdr. = ?
+      r2.ref = func
+      return .func-name-v[(r2.pos - r1.pos) / 'func['usz]]
+   }
+}
+func-decl-arg-v'func-decl-arg.[#expr-call-arg-limit * #func-limit]
+func-decl-arg-c'u32
+enum 'stars[#0, #1]'u8
+func'func
+func-c-idx'u32
+func-bc-idx'u32
+func-type'type
+func-stars'stars
+func-arg-start'u32
+func-arg-c'u8
+func-lvar-stack-c'u16
+func-info'line-info.
+func-decl(type'type, stars'stars, li'line-info) {
+   .func-type = type
+   .func-stars = stars
+   .func-info.copy-from(li)
+   .func-arg-start = .func-decl-arg-c
+}
+func-add(with-code'bool)'func {
+   func-arg-c' = .func-arg-c
+   .func-arg-c = 0
+   type-final' = .func-type.final-type(.func-stars, stars-final')
+   loop i' = 0; .func-c; i++ {
+      if .func-name-v[i] == .func-name {
+         func' = .func-v[i]
+         if with-code {
+            if func.code != null {
+               'c1.stdout{.func-info ": Function '" .func-name "' already has a code at " func.info "\n"}
+               'c.exit(#failure)
+            }
+            d' = .decl-c++
+            .decl-type-v[d] = #func
+            .decl-ptr-v[d] = func
+         }
+         if (||, type-final != func.type-final, stars-final != func.stars-final) {
+            'c1.stdout{.func-info ": Function '" .func-name "' is declared again with a different return type. Previous declaration is at " func.info "\n"}
+            'c.exit(#failure)
+         }
+         if func-arg-c != func.arg-c {
+            'c1.stdout{.func-info ": Function '" .func-name "' is declared again with a different number of argument/s. Previous declaration at " func.info " has " func.arg-c " argument/s while redeclaration has " func-arg-c " argument/s\n"}
+            'c.exit(#failure)
+         }
+         func-arg-start' = func.arg-start
+         loop j' = 0; func-arg-c; j++ {
+            farg-old' = .func-decl-arg-v[func-arg-start + j]
+            farg-new' = .func-decl-arg-v[.func-arg-start + j]
+            if (||, farg-old.type-final != farg-new.type-final, farg-old.stars-final != farg-new.stars-final) {
+               'c1.stdout{.func-info ": Function argument #" j + 1 " of '" .func-name "' is declared again with a different type. Previous declaration is at " func.info "\n"}
+               'c.exit(#failure)
+            }
+         }
+         if with-code {
+            func.info.copy-from(.func-info)
+            // The definition's parameter names are the ones used by its body.
+            // Earlier declarations only provide compatible parameter types.
+            func.arg-start = .func-arg-start
+         }
+         return func
+      }
+   }
+   .func-name-v[.func-c] = .func-name
+   func' = .func-v[.func-c++]
+   func.info.copy-from(.func-info)
+   if .func-is-bytecode {
+      func.cm1 = true
+      func.func-idx = .func-bc-idx++
+   } else {
+      func.func-idx = .func-c-idx++
+   }
+   func.type-src = .func-type
+   func.stars-src = .func-stars
+   func.type-final = type-final
+   func.stars-final = stars-final
+   func.arg-c = func-arg-c
+   .func-lvar-stack-c = 0
+   func.arg-start = .func-arg-start
+   func.lvar-start = .lvar-c
+   d' = .decl-c++
+   if with-code {
+      .decl-type-v[d] = #func
+   } else {
+      .decl-type-v[d] = #func-forward
+   }
+   .decl-ptr-v[d] = func
+   return func
+}
+func-decl() {
+   func-add(false)
+}
+func-code-c(str'char @const[], len'usz) {
+   func' = func-add(true)
+   func.code = str
+   func.code-len = len
+}
+func-code-bc(space'space) {
+   func' = func-add(true)
+   func.code = .cm1-bytecode-wtr.ref
+   bc-n8(func.arg-c)
+   bc-n16(.lvar-c - func.arg-c)
+   // Do necessary copying of arguments passed as aggregates
+   loop i' = 0; func.arg-c; i++ {
+      lvar' = .lvar-v[i]
+      type' = lvar.type-final
+      if lvar.stars-final == #0 {
+         if type.is-aggregate() {
+            bc-n8(i)
+            bc-n16((type.size + 7) >> 3) // How many 64-bits does the aggregate's memory consume?
+         }
+      }
+   }
+   bc-n8(0xff)
+   // Initialize the stack memory of aggregates and arrays
+   loop i' = func.arg-c; .lvar-c - func.arg-c; i++ {
+      lvar' = .lvar-v[i]
+      type' = lvar.type-final
+      if lvar.array-dim-c != 0 {
+         bc-n16(i)
+         bc-n16((lvar.array-size + 7) >> 3)
+      } elif lvar.stars-final == #0 {
+         if type.is-aggregate() {
+            bc-n16(i)
+            bc-n16((type.size + 7) >> 3) // How many 64-bits does the aggregate's memory consume?
+         }
+      }
+   }
+   bc-n16(0xffff) // No more structs and arrays
+   .func = func
+   space.output()
+   stmt-goto-resolve()
+   bc-op(#return)
+   'c.memset(.cm1-data-mem, 0, .cm1-data-pos)
+   .cm1-data-pos = 0
+   'c.memset(.space-v, 0, .space-c * 'space['usz])
+   .space-c = 0
+   'c.memset(.lvar-v, 0, .lvar-c * 'lvar['usz])
+   .lvar-c = 0
+}
+func-name'id
+func-is-bytecode'bool
+func-is-bytecode(str'char @const[], len'usz)'bool {
+   func-name' = id-get(str, len)
+   .func-name = func-name
+   if func-name < .cfg-func-list {
+      if .cfg-has-cm1 {
+         .func-is-bytecode = true
+         return true
+      } else {
+         .func-is-bytecode = false
+         return false
+      }
+   }
+   if .cfg-has-cm1 {
+      .func-is-bytecode = false
+      return false
+   } else {
+      .func-is-bytecode = true
+      return true
+   }
+}
+struct 'func-decl-arg[info'line-info., type-src'type, type-final'type, stars-src'stars, stars-final'stars, name'id]
+func-decl-arg(type'type, stars'stars, name'id, li'line-info) {
+   .func-arg-c++
+   da' = .func-decl-arg-v[.func-decl-arg-c++]
+   da.info.copy-from(li)
+   da.type-src = type
+   da.stars-src = stars
+   da.type-final = type.final-type(stars, da.stars-final)
+   da.name = name
+}
+}

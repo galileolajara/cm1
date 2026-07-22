@@ -1,0 +1,2227 @@
+require "Posix/fcntl.cp1"
+require "LibCp1/stdout.cp1"
+require "LibCp1/sprintf.cp1"
+require "LibCp1/fmtsz.cp1"
+require "LibC/stdlib.cp1"
+require "tokens.cp1"
+'c = 'libc
+'c1 = 'libcp1
+'x = 'posix
+putu(ref'ref&, u32'u32) @real-name(Fputnum)
+puti(ref'ref&, i32'i32) @real-name(Fputint)
+crc32c(seed'u32, ref'ref, len'u32)'u32 @real-name(crc32c)
+parse-f32(text'u8 @const[])'f32 @real-name(cm1_parse_f32)
+parse-f64(text'u8 @const[])'f64 @real-name(cm1_parse_f64)
+char-is-signed()'bool @real-name(cm1_char_is_signed)
+#id-limit = 1024 * 1024
+id-soa'id-soa.
+struct 'id-soa[
+   crc32c'u32[#id-limit],
+   ptr'char @const[#id-limit][],
+   len'u8[#id-limit],
+]
+using 'cm1 {
+stack-trace-exit() {
+   x'u8[]
+   x[0] = 0
+}
+include "cm1.c.h" {
+   cm1-c()'char @const[] @decl('<# cm1_c>)
+   cm1-c-len()'usz @decl('<# cm1_c_len>)
+}
+include "cm1.h.h" {
+   cm1-h()'char @const[] @decl('<# cm1_h>)
+   cm1-h-len()'usz @decl('<# cm1_h_len>)
+}
+enum 'op[
+#return,
+#pop-return,
+#call-cm1,
+#call-c,
+#pop,
+#push-zero,
+#push-i32,
+#push-u8,
+#push-u16,
+#push-u32,
+#push-u64,
+#copy-mem,
+#zero-mem,
+#gvar-push,
+#lvar-push,
+#lvar-set,
+#addr-add,
+#addr-sub,
+#jump-if-zero,
+#jump,
+#dup-pair,
+#ineg,
+#bit-not,
+#logical-not,
+#push-mem-ptr,
+#set-mem-ptr,
+#int-convert,
+#int-binary,
+#push-mem-int,
+#set-mem-int,
+#lvar-inc-dec-int,
+#mem-inc-dec-int,
+#push-f32,
+#push-f64,
+#num-convert,
+#float-binary,
+#push-mem-float,
+#set-mem-float,
+#fneg,
+#float-to-bool,
+#lvar-inc-dec-float,
+#mem-inc-dec-float,
+#push-string,
+]'u8 {
+   cp1-name(e'this)'char @const[] @cp1-name
+}
+union 'rdr[
+   ref'ref,
+   pos'usz,
+   p1'u8[],
+   p2'u16[],
+   char'char[],
+   p4'u32[],
+   p8'u64[],
+   f4'f32[],
+   f8'f64[],
+   op'op[],
+   ] {
+   n1(r'this)'u8 @inline {
+      val' = r.p1[0]
+      r.pos++
+      return val
+   }
+   n2(r'this)'u16 @inline {
+      val' = 'u16(r.p2[0])
+      r.pos += 2
+      return val
+   }
+   n4(r'this)'u32 @inline {
+      val' = r.p4[0]
+      r.pos += 4
+      return val
+   }
+   f4(r'this)'f32 @inline {
+      val' = r.f4[0]
+      r.pos += 4
+      return val
+   }
+   f8(r'this)'f64 @inline {
+      val' = r.f8[0]
+      r.pos += 8
+      return val
+   }
+   id(r'this)'id @inline {
+      return r.n()
+   }
+   include "num.c" {
+      n(r'this)'u32 @real-name(Fgetnum) @no-decl
+      i(r'this)'i32 @real-name(Fgetint) @no-decl
+      N(r'this)'u32 @real-name(Fgetlnum) @no-decl
+      I(r'this)'i32 @real-name(Fgetlint) @no-decl
+   }
+   tok(r'this)'token @inline {
+      return r.n1()
+   }
+   copy(r'this, data'ref, size'i32) @inline {
+      'c.memcpy(data, r.ref, size)
+      r.pos += size
+   }
+   b(r'this)'bool @inline {
+      return r.n1() != 0
+   }
+   set(r'this, ref'ref) @inline {
+      r.ref = ref
+   }
+}
+struct 'parser[] {
+   alloc()'parser
+   free(psr'this)
+   parse(psr'this, t'token, tok'token-data.) @real-name(cm1Parse)
+}
+struct 'token-data-i32[
+   path'char @const[],
+   row'u32,
+   col'u32,
+   id'i32,
+   id2'i32,
+   id3'i32,
+]
+struct 'token-data-f32[
+   path'char @const[],
+   row'u32,
+   col'u32,
+   f32'f32,
+]
+struct 'token-data-f64[
+   path'char @const[],
+   row'u32,
+   col'u32,
+   f64'f64,
+]
+struct 'token-data-u64[
+   path'char @const[],
+   row'u32,
+   col'u32,
+   id'u64,
+]
+struct 'token-data-ptr[
+   path'char @const[],
+   row'u32,
+   col'u32,
+   ptr'ref,
+   ptr2'ref,
+   ptr3'ref,
+]
+struct 'token-data-id[
+   path'char @const[],
+   row'u32,
+   col'u32,
+   id'id,
+]
+union 'token-data[
+   i32'token-data-i32.,
+   f32'token-data-f32.,
+   f64'token-data-f64.,
+   u64'token-data-u64.,
+   ptr'token-data-ptr.,
+   id'token-data-id.,
+]
+struct 'lexer[
+   start'u8[],
+   cursor'u8[],
+] {
+   init(lex'this, data'u8[]) {
+      lex.start = data
+      lex.cursor = data
+   }
+   scan(lex'this)'token @real-name(cm1_lexer_scan)
+}
+last-token'token
+last-row'u32
+last-col'u32
+row'u32
+col'u32
+input-path'char[] @real-name(input_path)
+input-mem'char[] @no-decl(input_mem)
+output-mem'char[] @no-decl(output_mem)
+include "cm1_preprocess.c" {
+   preprocess(in-path'char @const[], include-c'usz, include-v'char @const[][], define-c'usz, define-name-v'char @const[][], define-value-v'char @const[][])'usz @no-decl(preprocess)
+   preprocess-error-message()'char @const[] @no-decl(preprocess_error_message)
+}
+parse(in-path'char @const[]) {
+   include-v'char[1][]
+   include-v[0] = "include"
+   in-size' = preprocess(in-path, 1, include-v, 0, null, null)
+   if in-size == 0 {
+      'c1.stdout{preprocess-error-message()}
+      'c.exit(#failure)
+   }
+   in-data'char[] = .output-mem
+
+   r-end'rdr. = ?
+   r-end.ref = in-data
+   r-end.pos += in-size
+
+   .input-path = in-path
+   psr' = 'parser.alloc()
+   'lexer.init(lex?, in-data)
+   next-row' = 1
+   next-col' = 1
+   .row = 1
+   .col = 1
+   tok'token-data.
+   loop {
+      tok.i32.row = next-row
+      tok.i32.col = next-col
+      t' = lex.scan()
+      // 'c1.stdout{t.cp1-name() "\n"}
+      if true {
+         // when reporting the row and column of tokens, skip the spaces
+         pos' = lex.start
+         loop pos < r-end.p1 {
+            if pos[0] == ''  {
+               tok.i32.col++
+            } elif pos[0] == ''\n {
+               tok.i32.row++
+               tok.i32.col = 1
+            } else {
+               break
+            }
+            pos++
+         }
+      }
+      .last-row = .row
+      .last-col = .col
+      .row = tok.i32.row
+      .col = tok.i32.col
+      if (&&, t >= #int64, t <= #void) {
+         tok.ptr.ptr = builtin-type-token(t)
+         tok.ptr.ptr2 = null // Not an extern
+         t = #type
+      }
+      switch t {
+         case #spaces {
+            // Do nothing
+         }
+         case #line-info {
+            r1'rdr. = ?
+            r1.ref = lex.start
+            r1.pos += 2
+            num' = 0
+            c' = r1.p1[0]
+            loop {
+               num = (num * 10) + (c - ''0)
+               r1.pos++
+               c = r1.p1[0]
+               if (||, c < ''0, c > ''9) { break }
+            }
+            if r1.p1[0] != ''  {
+               "line_number_error:;"
+               'c1.stdout{"Error in reading the syntax of line info\n"}
+               'c.exit(#failure)
+            }
+            r1.pos++
+            if r1.p1[0] != ''" {
+               "goto line_number_error;"
+            }
+            r1.pos++
+            r2'rdr. = ?
+            r2.ref = r1.ref
+            path'char @const[] = r2.ref
+            loop {
+               if r2.p1[0] == ''" { break }
+               if r2.p1[0] == ''\0 {
+                  "goto line_number_error;"
+               }
+               r2.pos++
+            }
+            r2.p1[0] = ''\0
+            // path-len'u32 = r2.pos - r1.pos
+            // 'c1.stdout{"line-num: " num " " path, path-len "\n"}
+            .input-path = path
+            tok.id.path = path
+            next-row = num - 1
+            next-col = 1
+            // A preprocessor line marker updates source locations, but it is
+            // not part of the C grammar. Forwarding it to the parser can make
+            // it become the sole statement controlled by an if or loop.
+         }
+         case #func-c {
+            tok.id.id = .func-name
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #func-bc {
+            tok.id.id = .func-name
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #func {
+            r1'rdr. = ?
+            r1.ref = lex.start
+            r2'rdr. = ?
+            r2.ref = lex.cursor
+            tok.id.id = id-get(lex.start, r2.pos - r1.pos - 1)
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #struct-space-id {
+            r1'rdr. = ?
+            r1.ref = lex.start
+            r1.pos += 7
+            r2'rdr. = ?
+            r2.ref = lex.cursor
+            id' = id-get(r1.ref, r2.pos - r1.pos)
+            tok.ptr.ptr = aggregate-type-get(id, #struct)
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #union-space-id {
+            r1'rdr. = ?
+            r1.ref = lex.start
+            r1.pos += 6
+            r2'rdr. = ?
+            r2.ref = lex.cursor
+            id' = id-get(r1.ref, r2.pos - r1.pos)
+            tok.ptr.ptr = aggregate-type-get(id, #union)
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #id {
+            r1'rdr. = ?
+            r1.ref = lex.start
+            r2'rdr. = ?
+            r2.ref = lex.cursor
+            id' = id-get(lex.start, r2.pos - r1.pos)
+            loop i' = 0; .typename-c; i++ {
+               if .typename-id-v[i] == id {
+                  tok.ptr.ptr = .typename-type-v[i]
+                  tok.ptr.ptr2 = null // Not an extern
+                  t = #type
+                  "goto id_is_a_type;"
+               }
+            }
+            tok.id.id = id
+            "id_is_a_type:;"
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #i32 {
+            str' = lex.start
+            num'u32 = 0
+            base'u32 = 10
+            start' = 0
+            if (&&, str[0] == ''0, (||, str[1] == ''x, str[1] == ''X)) {
+               base = 16
+               start = 2
+            }
+            loop i' = start; ; i++ {
+               c' = str[i]
+               digit'u32 = 16
+               if (&&, c >= ''0, c <= ''9) {
+                  digit = c - ''0
+               } elif (&&, c >= ''a, c <= ''f) {
+                  digit = (c - ''a) + 10
+               } elif (&&, c >= ''A, c <= ''F) {
+                  digit = (c - ''A) + 10
+               }
+               if digit >= base { break }
+               num = (num * base) + digit
+            }
+            tok.i32.id = num
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #f32-num {
+            tok.f32.f32 = parse-f32(lex.start)
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #f64-num {
+            tok.f64.f64 = parse-f64(lex.start)
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #string {
+            tok.ptr.ptr = lex.start
+            tok.ptr.ptr2 = lex.cursor
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #c-code {
+            tok.ptr.ptr = lex.start
+            tok.ptr.ptr2 = lex.cursor
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         default {
+            .last-token = t
+            psr.parse(t, tok)
+         }
+      }
+      if t == #end { break }
+      pos' = lex.start
+      loop pos < lex.cursor {
+         if (pos[0] & 128) == 0 {
+            if pos[0] == ''\n {
+               next-row++
+               next-col = 1
+            } else {
+               next-col++
+            }
+         }
+         pos++
+      }
+   }
+   .last-token = #nil
+   psr.parse(#nil, tok)
+   psr.free()
+}
+id-c'id
+id-get(ptr'char @const[], lensz'usz)'id {
+   if lensz > 255 {
+      'c1.stdout{"Id is too long: " ptr, lensz "\n"}
+      stack-trace-exit()
+   }
+   len'u8 = lensz
+   crc32c' = crc32c(0, ptr, len)
+   loop i'id = 0; .id-c; i++ {
+      if (&&, i[]crc32c == crc32c, i[]len == len, 'c.memcmp(i[]ptr, ptr, len) == 0) {
+         return i
+      }
+   }
+   id' = .id-c++
+   id[]crc32c = crc32c
+   id[]len = len
+   id[]ptr = ptr
+   return id
+}
+token-name(tok'token)'char[] {
+   return tok.cp1-name()
+}
+enum 'id[#nil = -1]'u32 @soa-field(.id-soa.)
+struct 'stmt[info'line-info., type'stmt-type, next'stmt]
+struct 'stmt-expr[base'stmt., expr'expr]
+struct 'stmt-if[base'stmt., next'stmt, expr'expr, space'space, prev-jump-ptr'u32[]]
+struct 'stmt-else[base'stmt., space'space, prev-jump-ptr'u32[]]
+struct 'stmt-block[base'stmt., space'space]
+struct 'stmt-loop[base'stmt., expr'expr, post'expr, space'space]
+struct 'stmt-switch[base'stmt., expr'expr, space'space, first-label'stmt-label, last-label'stmt-label, default-label'stmt-label]
+struct 'stmt-label[base'stmt., expr'expr, next-label'stmt-label, bytecode-pos'usz]
+struct 'stmt-named-label[base'stmt., name'id]
+struct 'stmt-goto[base'stmt., name'id]
+struct 'stmt-return[base'stmt., expr'expr]
+enum 'stmt-type[#none, #expr, #return, #if, #elif, #else, #block, #while, #do-while, #for, #switch, #case, #default, #break, #continue, #named-label, #goto]'u8 {
+   cp1-name(e'this)'char @const[] @cp1-name
+}
+bc-op(op'op) {
+   // 'c1.stdout{op "\n"}
+   .cm1-bytecode-wtr.op[0] = op
+   .cm1-bytecode-wtr.pos++
+}
+bc-n8(val'u8) {
+   .cm1-bytecode-wtr.p1[0] = val
+   .cm1-bytecode-wtr.pos += 1
+}
+bc-n16(val'u16) {
+   .cm1-bytecode-wtr.p2[0] = val
+   .cm1-bytecode-wtr.pos += 2
+}
+bc-n32(val'u32) {
+   .cm1-bytecode-wtr.p4[0] = val
+   .cm1-bytecode-wtr.pos += 4
+}
+bc-n64(val'u64) {
+   .cm1-bytecode-wtr.p8[0] = val
+   .cm1-bytecode-wtr.pos += 8
+}
+bc-f32(val'f32) {
+   .cm1-bytecode-wtr.f4[0] = val
+   .cm1-bytecode-wtr.pos += 4
+}
+bc-f64(val'f64) {
+   .cm1-bytecode-wtr.f8[0] = val
+   .cm1-bytecode-wtr.pos += 8
+}
+bc-u(val'u32) {
+   putu(.cm1-bytecode-wtr.p1, val)
+}
+bc-zero() {
+   bc-op(#push-zero)
+}
+meta #meta-codes {
+   using 'cm1 {
+#  if .is-64bit {
+      bc-push-usz(val'usz) {
+         bc-push-u64('u64(val))
+      }
+      bc-push-isz(val'isz) {
+         bc-push-i64('i64(val))
+      }
+#  } else {
+      bc-push-usz(val'usz) {
+         bc-push-u32('u32(val))
+      }
+      bc-push-isz(val'isz) {
+         bc-push-i32('i32(val))
+      }
+#  }
+   }
+}
+#meta-codes{}
+bc-push-u32(val'i32) {
+   if val == 0 {
+      bc-zero()
+   } elif val < 256 {
+      bc-op(#push-u8)
+      bc-n8(val)
+   } elif val < 65536 {
+      bc-op(#push-u16)
+      bc-n32(val)
+   } else {
+      bc-op(#push-u32)
+      bc-n32(val)
+   }
+}
+bc-push-u64(val'u64) {
+   if val == 0 {
+      bc-zero()
+   } elif val < 256 {
+      bc-op(#push-u8)
+      bc-n8(val)
+   } elif val < 65536 {
+      bc-op(#push-u16)
+      bc-n32(val)
+   } elif val < 4294967296u64 {
+      bc-op(#push-u32)
+      bc-n32(val)
+   } else {
+      bc-op(#push-u64)
+      bc-n64(val)
+   }
+}
+bc-push-i32(val'i32) {
+   if val == 0 {
+      bc-op(#push-zero)
+   } else {
+      bc-op(#push-i32)
+      bc-n32(val)
+   }
+}
+bc-push-f32(val'f32) {
+   bc-op(#push-f32)
+   bc-f32(val)
+}
+bc-push-f64(val'f64) {
+   bc-op(#push-f64)
+   bc-f64(val)
+}
+bc-i(val'u32) {
+   puti(.cm1-bytecode-wtr.p1, val)
+}
+stmt-expr(e'expr) {
+   stmt'stmt-expr = stmt-alloc('stmt-expr['usz], #expr, e.info)
+   stmt.expr = e
+   space-add(stmt.base)
+}
+cm1-data-mem'u64[1024 * 1024 * 128]
+cm1-data-pos'u32
+stmt-alloc(size'usz, type'stmt-type, li'line-info)'ref {
+   r'rdr. = ?
+   r.ref = .cm1-data-mem
+   r.pos += .cm1-data-pos
+   .cm1-data-pos += (size + 7) & (0xffffffff ^ 7) // Align to 8 bytes
+   stmt'stmt = r.ref
+   stmt.info.copy-from(li)
+   stmt.type = type
+   return r.ref
+}
+#decl-limit = #type-limit + #func-limit + #typename-limit
+enum 'decl-type[#aggregate-forward, #aggregate, #typedef-aggregate, #typedef, #typedef-name, #func-forward, #func, #gvar]'u8
+decl-type-v'decl-type[#decl-limit]
+decl-ptr-v'ref[#decl-limit]
+decl-c'u32
+#type-limit = 1024 * 8
+type-v'type.[#type-limit]
+type-c'u32
+#typename-limit = 1024 * 16
+typename-id-v'id[#typename-limit]
+typename-type-v'type[#typename-limit]
+typename-c'u32
+struct 'gvar[info'line-info., type-src'type, type-final'type, stars-src'stars, stars-final'stars, array-dim-start'u32, array-dim-c'u32, array-size'u32, extern'bool] {
+   name(gvar'this)'id {
+      r1'rdr. = ?
+      r1.ref = .gvar-v
+      r2'rdr. = ?
+      r2.ref = gvar
+      return .gvar-name-v[(r2.pos - r1.pos) / 'gvar['usz]]
+   }
+}
+#gvar-limit = 1024 * 64
+#array-dim-limit = 1024 * 1024
+array-dim-v'u32[#array-dim-limit]
+array-dim-count'u32
+gvar-v'gvar.[#gvar-limit]
+gvar-name-v'id[#gvar-limit]
+gvar-c'u32
+gvar-decl(type'type, stars'stars, extern'bool, name'id, array-dims'u32[], array-dim-c'u32, li'line-info) {
+   "#ifdef __EMSCRIPTEN__"
+   'c1.stdout{li ": Global variables are not supported yet in web builds but works on builds for Linux, FreeBSD, Windows, Android, macOS and iOS.\n"}
+   'c.exit(#failure)
+   "#endif"
+   .gvar-name-v[.gvar-c] = name
+   gvar' = .gvar-v[.gvar-c++]
+   gvar.info.copy-from(li)
+   gvar.type-src = type
+   gvar.stars-src = stars
+   gvar.type-final = type.final-type(stars, gvar.stars-final)
+   gvar.array-dim-c = array-dim-c
+   if array-dim-c != 0 {
+      array-decl(gvar.type-final, gvar.stars-final, array-dims, array-dim-c, li, gvar.array-dim-start, gvar.array-size)
+   }
+   gvar.extern = extern
+   d' = .decl-c++
+   .decl-type-v[d] = #gvar
+   .decl-ptr-v[d] = gvar
+}
+declarator-type'type
+declarator-extern'bool
+declarator-begin(type'type, extern'bool) {
+   .declarator-type = type
+   .declarator-extern = extern
+}
+declarator-gvar(stars'stars, name'id, array-dims'u32[], array-dim-c'u32, li'line-info) {
+   gvar-decl(.declarator-type, stars, .declarator-extern, name, array-dims, array-dim-c, li)
+}
+declarator-field(stars'stars, name'id, array-dims'u32[], array-dim-c'u32, li'line-info) {
+   field(.declarator-type, stars, name, array-dims, array-dim-c, li)
+}
+declarator-lvar(stars'stars, name'id, array-dims'u32[], array-dim-c'u32, src'expr, li'line-info) {
+   space-lvar(.declarator-type, stars, name, array-dims, array-dim-c, src, li)
+}
+current-type'type @real-name(current_type)
+current-stars'stars
+#field-limit = 1024
+field-v'field.[#field-limit]
+field-c'u16
+field-offset'u32
+field-max-size'u32
+field-max-align'u32
+field(type'type, stars'stars, name'id, array-dims'u32[], array-dim-c'u32, li'line-info) {
+   field' = .field-v[.field-c++]
+   field.type-src = type
+   field.stars-src = stars
+   field.type-final = type.final-type(stars, field.stars-final)
+   field.name = name
+   field.array-dim-c = array-dim-c
+   element-size' = type-storage-size(field.type-final, field.stars-final, li)
+   field-size' = element-size
+   if array-dim-c != 0 {
+      array-decl(field.type-final, field.stars-final, array-dims, array-dim-c, li, field.array-dim-start, field.array-size)
+      field-size = field.array-size
+   }
+   field-align' = type-storage-align(field.type-final, field.stars-final, li)
+   if .field-max-size < field-size {
+      .field-max-size = field-size
+   }
+   if .field-max-align < field-align {
+      .field-max-align = field-align
+   }
+   if .current-type.kind == #union {
+      field.offset = 0
+   } else {
+      field-offset' = (.field-offset + (field-align - 1)) & (0xffffffff ^ (field-align - 1))
+      .field-offset = field-offset + field-size
+      field.offset = field-offset
+   }
+}
+aggregate-begin(type'type, is-union'bool, li'line-info) {
+   if type == null {
+      type = .type-v[.type-c++]
+      type.name = #nil
+      if is-union {
+         type.kind = #union
+      } else {
+         type.kind = #struct
+      }
+      .current-type = type
+      .current-stars = #0
+      d' = .decl-c++
+      .decl-type-v[d] = #typedef-aggregate
+      .decl-ptr-v[d] = type
+   } else {
+      if type.field-v != null {
+         'c1.stdout{li ": Redefining the struct or union '" type.name "'\n"}
+         'c.exit(#failure)
+      }
+      .current-type = type
+      .current-stars = #0
+      d' = .decl-c++
+      .decl-type-v[d] = #aggregate
+      .decl-ptr-v[d] = type
+   }
+}
+aggregate-forward(type'type) {
+   d' = .decl-c++
+   .decl-type-v[d] = #aggregate-forward
+   .decl-ptr-v[d] = type
+}
+#field-mem-limit = 1024 * 128
+field-mem-v'field.[#field-mem-limit]
+field-mem-c'u32
+aggregate-end() {
+   field-c' = .field-c
+   .field-c = 0
+   type' = .current-type
+   r'rdr. = ?
+   r.ref = .field-mem-v
+   r.pos += .field-mem-c * 'field['usz]
+   .field-mem-c += field-c * 'field['usz]
+   field-v'field.[] = r.pos
+   type.field-c = field-c
+   type.align = .field-max-align
+   if .field-max-align == 0 {
+      type.size = 0
+   } elif type.kind == #union {
+      type.size = (.field-max-size + (.field-max-align - 1)) & (0xffffffff ^ (.field-max-align - 1))
+   } else {
+      type.size = (.field-offset + (.field-max-align - 1)) & (0xffffffff ^ (.field-max-align - 1))
+   }
+   .field-offset = 0
+   .field-max-size = 0
+   .field-max-align = 0
+   type.field-v = field-v
+   loop i' = 0; field-c; i++ {
+      field-v[i].copy-from(.field-v[i])
+   }
+}
+struct 'line-info[path'char @const[], row'u32, col'u32] {
+   copy-from(li'this, src'line-info) {
+      li.path = src.path
+      li.row = src.row
+      li.col = src.col
+   }
+   init(li'this, path'char @const[], row'u32, col'u32) {
+      li.path = path
+      li.row = row
+      li.col = col
+   }
+}
+typedef-name(id'id, stars'stars, li'line-info) {
+   loop i' = 0; .typename-c; i++ {
+      if .typename-id-v[i] == id {
+         'c1.stdout{li ": There's already a typedef for '" id "'\n"}
+         'c.exit(#failure)
+      }
+   }
+   type' = .current-type
+   type2' = .type-v[.type-c++]
+   type2.name = id
+   type2.kind = #typedef
+   type2.field-c = 'base(stars + .current-stars)
+   ref'ref = type
+   type2.field-v = ref
+   .typename-id-v[.typename-c] = id
+   .typename-type-v[.typename-c] = type2
+   .typename-c++
+   d' = .decl-c++
+   .decl-type-v[d] = #typedef-name
+   .decl-ptr-v[d] = type2
+}
+typedef-begin(type'type) {
+   if type.kind == #typedef {
+      .current-type = type.final-type-fast()
+      .current-stars = type.stars()
+   } else {
+      .current-type = type
+      .current-stars = #0
+   }
+   d' = .decl-c++
+   .decl-type-v[d] = #typedef
+   .decl-ptr-v[d] = type
+}
+stmt-return(expr'expr, li'line-info) {
+   if expr == null {
+      stmt'stmt-return = stmt-alloc('stmt-return['usz], #return, li)
+      space-add(stmt.base)
+   } else {
+      stmt'stmt-return = stmt-alloc('stmt-return['usz], #return, expr.info)
+      stmt.expr = expr
+      space-add(stmt.base)
+   }
+}
+#if-stack-limit = 128
+if-stack-v'stmt-if[#if-stack-limit]
+if-stack-c'u8
+stmt-if-begin(expr'expr) {
+   stmt'stmt-if = stmt-alloc('stmt-if['usz], #if, expr.info)
+   stmt.expr = expr
+   .if-stack-v[.if-stack-c++] = stmt
+   space-add(stmt.base)
+}
+stmt-if-space(space'space) {
+   .if-stack-v[.if-stack-c - 1].space = space
+}
+stmt-if-end() {
+   .if-stack-c--
+}
+stmt-elif-begin(expr'expr) {
+   stmt'stmt-if = stmt-alloc('stmt-if['usz], #elif, expr.info)
+   stmt.expr = expr
+   .if-stack-v[.if-stack-c - 1].next = stmt.base
+   .if-stack-v[.if-stack-c - 1] = stmt
+   space-add(stmt.base)
+}
+stmt-elif-end(space'space) {
+   .if-stack-v[.if-stack-c - 1].space = space
+}
+stmt-else(space'space, li'line-info) {
+   stmt'stmt-else = stmt-alloc('stmt-else['usz], #else, li)
+   .if-stack-v[.if-stack-c - 1].next = stmt.base
+   stmt.space = space
+   space-add(stmt.base)
+}
+stmt-while(expr'expr, space'space) {
+   stmt'stmt-loop = stmt-alloc('stmt-loop['usz], #while, expr.info)
+   stmt.expr = expr
+   stmt.space = space
+   space-add(stmt.base)
+}
+stmt-do-while(expr'expr, space'space, li'line-info) {
+   stmt'stmt-loop = stmt-alloc('stmt-loop['usz], #do-while, li)
+   stmt.expr = expr
+   stmt.space = space
+   space-add(stmt.base)
+}
+stmt-for(expr'expr, post'expr, body'space, for-space'space, li'line-info) {
+   stmt'stmt-loop = stmt-alloc('stmt-loop['usz], #for, li)
+   stmt.expr = expr
+   stmt.post = post
+   stmt.space = body
+   space-add(stmt.base)
+   space-end()
+   block'stmt-block = stmt-alloc('stmt-block['usz], #block, li)
+   block.space = for-space
+   space-add(block.base)
+}
+stmt-switch(expr'expr, space'space, li'line-info) {
+   stmt'stmt-switch = stmt-alloc('stmt-switch['usz], #switch, li)
+   stmt.expr = expr
+   stmt.space = space
+   space-add(stmt.base)
+}
+stmt-case(expr'expr, li'line-info) {
+   stmt'stmt-label = stmt-alloc('stmt-label['usz], #case, li)
+   stmt.expr = expr
+   space-add(stmt.base)
+}
+stmt-default(li'line-info) {
+   stmt'stmt-label = stmt-alloc('stmt-label['usz], #default, li)
+   space-add(stmt.base)
+}
+stmt-break(li'line-info) {
+   stmt'stmt = stmt-alloc('stmt['usz], #break, li)
+   space-add(stmt)
+}
+stmt-continue(li'line-info) {
+   stmt'stmt = stmt-alloc('stmt['usz], #continue, li)
+   space-add(stmt)
+}
+stmt-named-label(name'id, li'line-info) {
+   stmt'stmt-named-label = stmt-alloc('stmt-named-label['usz], #named-label, li)
+   stmt.name = name
+   space-add(stmt.base)
+}
+stmt-goto(name'id, li'line-info) {
+   stmt'stmt-goto = stmt-alloc('stmt-goto['usz], #goto, li)
+   stmt.name = name
+   space-add(stmt.base)
+}
+export() {
+   stmt-if-begin(null)
+   stmt-if-space(null)
+   stmt-if-end()
+   stmt-elif-begin(null)
+   stmt-elif-end(null)
+   stmt-else(null, null)
+   stmt-while(null, null)
+   stmt-do-while(null, null, null)
+   stmt-for(null, null, null, null, null)
+   stmt-switch(null, null, null)
+   stmt-case(null, null)
+   stmt-default(null)
+   stmt-break(null)
+   stmt-continue(null)
+   stmt-named-label(#nil, null)
+   stmt-goto(#nil, null)
+   expr-unary(null, #amp)
+   expr-inc-dec(null, false, false)
+   expr-sizeof-expr(null)
+   expr-size-align-type(null, #0, false, null)
+   array-const-sizeof(null, #0, null)
+   expr-math(null, #add, null)
+   expr-logical(null, false, null)
+   stmt-return(null, null)
+   typedef-begin(null)
+   typedef-name(#nil, #0, null)
+   expr-field(null, false, #nil)
+   expr-index(null, null)
+   field(null, #0, #nil, null, 0, null)
+   declarator-begin(null, false)
+   declarator-field(#0, #nil, null, 0, null)
+   declarator-gvar(#0, #nil, null, 0, null)
+   declarator-lvar(#0, #nil, null, 0, null, null)
+   token-name(#end)
+   stdout-then-print-error("", 0)
+   func-decl(null, #0, null)
+   func-decl-arg(null, #0, #nil, null)
+   func-decl()
+   func-code-c("", 0)
+   func-code-bc(null)
+   space-begin()
+   space-end()
+   space-lvar(null, #0, #nil, null, 0, null, null)
+   stmt-expr(null)
+   expr-call(#nil, null)
+   expr-call-begin()
+   expr-call-arg(null)
+   expr-i32(0, null)
+   expr-f32('f32(0), null)
+   expr-f64('f64(0), null)
+   expr-string(null, 0, null)
+   expr-conditional(null, null, null)
+   func-is-bytecode(null, 0)
+   gvar-decl(null, #0, false, #nil, null, 0, null)
+   expr-var(#nil, null)
+   expr-assign(null, #set, null)
+   expr-cast(null, null, #0, null)
+   aggregate-begin(null, false, null)
+   aggregate-forward(null)
+   aggregate-end()
+}
+// Integer kinds are signed/unsigned pairs ordered by storage width.  The VM
+// relies on this layout to derive signedness and size directly from the value.
+enum 'type-kind[#void, #i8, #u8, #i16, #u16, #i32, #u32, #i64, #u64, #f32, #f64, #struct, #typedef, #union]'u8 {
+   cp1-name(e'this)'char @const[] @cp1-name
+}
+struct 'field[name'id, stars-src'stars, stars-final'stars, type-src'type, type-final'type, offset'u32, array-dim-start'u32, array-dim-c'u32, array-size'u32] {
+   copy-from(des'this, src'field) {
+      des.name = src.name
+      des.stars-src = src.stars-src
+      des.stars-final = src.stars-final
+      des.type-src = src.type-src
+      des.type-final = src.type-final
+      des.offset = src.offset
+      des.array-dim-start = src.array-dim-start
+      des.array-dim-c = src.array-dim-c
+      des.array-size = src.array-size
+   }
+}
+struct 'type[name'id, kind'type-kind, field-c'u16, align'u8, size'u32, field-v'field.[]] {
+   is-aggregate(type'this)'bool {
+      return (||, type.kind == #struct, type.kind == #union)
+   }
+   is-integer(type'this)'bool {
+      return (&&, type.kind >= #i8, type.kind <= #u64)
+   }
+   is-floating(type'this)'bool {
+      return (||, type.kind == #f32, type.kind == #f64)
+   }
+   is-arithmetic(type'this)'bool {
+      return (||, type.is-integer(), type.is-floating())
+   }
+   is-signed-integer(type'this)'bool {
+      return (&&, type.is-integer(), ('u8(type.kind) & 1) != 0)
+   }
+   integer-promote(type'this)'type {
+      if (&&, type.kind >= #i8, type.kind <= #u16) {
+         return .type-v[5]
+      }
+      return type
+   }
+   as-typedef(type'this, type2'type) {
+      type.kind = #typedef
+      ref'ref = type2
+      type.field-v = ref
+   }
+   stars(type'this)'stars {
+      return type.field-c
+   }
+   final-type-fast(type'this)'type {
+      ref'ref = type.field-v
+      return ref
+   }
+   final-type(type'this, stars'stars, out-stars'stars&)'type {
+      if type.kind == #typedef {
+         out-stars = stars + 'stars(type.field-c)
+         return type.final-type-fast()
+      } else {
+         out-stars = stars
+         return type
+      }
+   }
+}
+integer-rank(type'type)'u8 {
+   switch type.kind {
+      case #i64 { return 2 }
+      case #u64 { return 2 }
+   }
+   return 1
+}
+integer-unsigned-type(type'type)'type {
+   switch type.kind {
+      case #i64 { return .type-v[8] }
+      case #u64 { return .type-v[8] }
+   }
+   return .type-v[6]
+}
+integer-common-type(type1'type, type2'type)'type {
+   type1 = type1.integer-promote()
+   type2 = type2.integer-promote()
+   if type1 == type2 { return type1 }
+   signed1' = type1.is-signed-integer()
+   signed2' = type2.is-signed-integer()
+   rank1' = integer-rank(type1)
+   rank2' = integer-rank(type2)
+   if signed1 == signed2 {
+      if rank1 > rank2 { return type1 }
+      return type2
+   }
+   signed-type' = type1
+   unsigned-type' = type2
+   signed-rank' = rank1
+   unsigned-rank' = rank2
+   if !signed1 {
+      signed-type = type2
+      unsigned-type = type1
+      signed-rank = rank2
+      unsigned-rank = rank1
+   }
+   if unsigned-rank >= signed-rank { return unsigned-type }
+   // On the supported C model, int64_t represents every uint32_t value.
+   if (&&, signed-type.kind == #i64, unsigned-type.kind == #u32) {
+      return signed-type
+   }
+   return integer-unsigned-type(signed-type)
+}
+arithmetic-common-type(type1'type, type2'type)'type {
+   if (||, type1.kind == #f64, type2.kind == #f64) {
+      return .type-v[10]
+   }
+   if (||, type1.kind == #f32, type2.kind == #f32) {
+      return .type-v[9]
+   }
+   return integer-common-type(type1, type2)
+}
+target-size-type()'type {
+   if 'usz['usz] == 8 { return .type-v[8] }
+   return .type-v[6]
+}
+bc-int-convert(type'type) {
+   bc-op(#int-convert)
+   bc-n8('u8(type.kind))
+}
+bc-int-binary(op'math-op, type'type) {
+   bc-op(#int-binary)
+   bc-n8(('u8(op) << 4) | 'u8(type.kind))
+}
+bc-inc-dec-arg(mode'u8, type'type) {
+   bc-n8((mode << 4) | 'u8(type.kind))
+}
+bc-number-convert(src-type'type, des-type'type) {
+   if src-type == des-type { return }
+   if (&&, src-type.is-integer(), des-type.is-integer()) {
+      bc-int-convert(des-type)
+   } else {
+      bc-op(#num-convert)
+      bc-n8(('u8(src-type.kind) << 4) | 'u8(des-type.kind))
+   }
+}
+bc-float-binary(op'math-op, type1'type, type2'type, result-type'type) {
+   bc-op(#float-binary)
+   bc-n8(('u8(op) << 4) | 'u8(result-type.kind))
+   bc-n8(('u8(type1.kind) << 4) | 'u8(type2.kind))
+}
+bc-push-mem-arithmetic(type'type) {
+   if type.is-integer() {
+      bc-op(#push-mem-int)
+   } else {
+      bc-op(#push-mem-float)
+   }
+   bc-n8('u8(type.kind))
+}
+bc-set-mem-arithmetic(type'type) {
+   if type.is-integer() {
+      bc-op(#set-mem-int)
+   } else {
+      bc-op(#set-mem-float)
+   }
+   bc-n8('u8(type.kind))
+}
+bc-scalar-to-bool(type'type, stars'stars) {
+   if (&&, stars == #0, type.is-floating()) {
+      bc-op(#float-to-bool)
+      bc-n8('u8(type.kind))
+   }
+}
+scalar-convert-assignment(src-type'type, src-stars'stars, des-type'type, des-stars'stars, li'line-info) {
+   if (&&, src-stars == #0, des-stars == #0) {
+      if (&&, src-type.is-arithmetic(), des-type.is-arithmetic()) {
+         bc-number-convert(src-type, des-type)
+         return
+      }
+   }
+   if (||, src-type != des-type, src-stars != des-stars) {
+      'c1.stdout{li ": Type mismatch\n"}
+      'c.exit(#failure)
+   }
+}
+bc-arithmetic-compound(op'assign-op, lhs-type'type, rhs-type'type, li'line-info) {
+   if (||, !lhs-type.is-arithmetic(), !rhs-type.is-arithmetic()) {
+      'c1.stdout{li ": Compound assignment requires arithmetic operands\n"}
+      'c.exit(#failure)
+   }
+   if (||, lhs-type.is-floating(), rhs-type.is-floating()) {
+      result-type' = arithmetic-common-type(lhs-type, rhs-type)
+      switch op {
+         case #add { bc-float-binary(#add, lhs-type, rhs-type, result-type) }
+         case #sub { bc-float-binary(#sub, lhs-type, rhs-type, result-type) }
+         case #mul { bc-float-binary(#mul, lhs-type, rhs-type, result-type) }
+         case #div { bc-float-binary(#div, lhs-type, rhs-type, result-type) }
+         default {
+            'c1.stdout{li ": This compound operator requires integer operands\n"}
+            'c.exit(#failure)
+         }
+      }
+      bc-number-convert(result-type, lhs-type)
+      return
+   }
+   result-type' = integer-common-type(lhs-type, rhs-type)
+   if (||, op == #shl, op == #shr) {
+      result-type = lhs-type.integer-promote()
+   }
+   switch op {
+      case #add { bc-int-binary(#add, result-type) }
+      case #sub { bc-int-binary(#sub, result-type) }
+      case #mul { bc-int-binary(#mul, result-type) }
+      case #div { bc-int-binary(#div, result-type) }
+      case #mod { bc-int-binary(#mod, result-type) }
+      case #shl { bc-int-binary(#shl, result-type) }
+      case #shr { bc-int-binary(#shr, result-type) }
+      case #and { bc-int-binary(#and, result-type) }
+      case #xor { bc-int-binary(#xor, result-type) }
+      case #or { bc-int-binary(#or, result-type) }
+   }
+   // The result of E1 op= E2 is converted back to E1's type.
+   bc-int-convert(lhs-type)
+}
+builtin-type-token(tok'token)'type {
+   // These indices must match the built-in type initialization order in main.
+   switch tok {
+      case #int64 { return .type-v[7] }
+      case #int32 { return .type-v[5] }
+      case #int16 { return .type-v[3] }
+      case #int8 { return .type-v[1] }
+      case #uint64 { return .type-v[8] }
+      case #uint32 { return .type-v[6] }
+      case #uint16 { return .type-v[4] }
+      case #uint8 { return .type-v[2] }
+      case #f32 { return .type-v[9] }
+      case #f64 { return .type-v[10] }
+      case #void { return .type-v[0] }
+      default {
+         'c1.stdout{"Internal error: Token '" token-name(tok) "' is not an integer type\n"}
+         'c.exit(#failure)
+      }
+   }
+   return null
+}
+type-storage-size(type'type, stars'stars, li'line-info)'u32 {
+   if stars != #0 {
+      return 'usz['usz]
+   }
+   switch type.kind {
+      case #i8 { return 1 }
+      case #u8 { return 1 }
+      case #i16 { return 2 }
+      case #u16 { return 2 }
+      case #i32 { return 4 }
+      case #u32 { return 4 }
+      case #f32 { return 4 }
+      case #i64 { return 8 }
+      case #u64 { return 8 }
+      case #f64 { return 8 }
+   }
+   if type.is-aggregate() {
+      if type.field-v == null {
+         'c1.stdout{li ": Struct or union type is incomplete\n"}
+         'c.exit(#failure)
+      }
+      return type.size
+   }
+   'c1.stdout{li ": Type '" type.kind "' does not have a size\n"}
+   'c.exit(#failure)
+   return 0
+}
+array-const-sizeof(type'type, stars'stars, li'line-info)'u32 {
+   final-stars'stars = #0
+   final-type' = type.final-type(stars, final-stars)
+   return type-storage-size(final-type, final-stars, li)
+}
+type-storage-align(type'type, stars'stars, li'line-info)'u32 {
+   if stars != #0 {
+      return 'usz['usz]
+   }
+   switch type.kind {
+      case #i8 { return 1 }
+      case #u8 { return 1 }
+      case #i16 { return 2 }
+      case #u16 { return 2 }
+      case #i32 { return 4 }
+      case #u32 { return 4 }
+      case #f32 { return 4 }
+      case #i64 { return 8 }
+      case #u64 { return 8 }
+      case #f64 { return 8 }
+   }
+   if type.is-aggregate() {
+      if type.field-v == null {
+         'c1.stdout{li ": Struct or union type is incomplete\n"}
+         'c.exit(#failure)
+      }
+      return type.align
+   }
+   'c1.stdout{li ": Type '" type.kind "' does not have an alignment\n"}
+   'c.exit(#failure)
+   return 0
+}
+array-decl(type'type, stars'stars, array-dims'u32[], array-dim-c'u32, li'line-info, out-start'u32&, out-size'u32&) {
+   if array-dim-c > (#array-dim-limit - .array-dim-count) {
+      'c1.stdout{li ": Too many array dimensions\n"}
+      'c.exit(#failure)
+   }
+   out-start = .array-dim-count
+   out-size = type-storage-size(type, stars, li)
+   loop i' = 0; array-dim-c; i++ {
+      dim' = array-dims[i]
+      .array-dim-v[.array-dim-count++] = dim
+      if dim > (0xffffffff / out-size) {
+         'c1.stdout{li ": Array size is too large\n"}
+         'c.exit(#failure)
+      }
+      out-size *= dim
+   }
+}
+aggregate-type-get(id'id, kind'type-kind)'type {
+   loop i' = 0; .type-c; i++ {
+      type' = .type-v[i]
+      if (&&, type.is-aggregate(), type.name == id) {
+         if type.kind != kind {
+            'c1.stdout{"Tag '" id "' was used as both a struct and a union\n"}
+            'c.exit(#failure)
+         }
+         return type
+      }
+   }
+   type' = .type-v[.type-c++]
+   type.name = id
+   type.kind = kind
+   return type
+}
+c-code-buf'char[1024 * 1024 * 64]
+#cm1-string-byte-limit = 1024 * 1024 * 128
+struct 'cm1-bytecode[
+   offset-v'u32[#func-limit + 1], // +1 for crc32c
+   buf'char[1024 * 1024 * 256],
+   str'char[#cm1-string-byte-limit]
+]
+cm1-bytecode'cm1-bytecode.
+cm1-bytecode-wtr'rdr.
+cm1-string-pos'u32
+cm1-string-count'u32
+cm1-string-offset-v'u32[#string-limit]
+cm1-string-len-v'u32[#string-limit]
+cm1-string-crc32c-v'u32[#string-limit]
+
+cm1-string-put(pos'u32&, value'u32, li'line-info) {
+   if pos >= (#cm1-string-byte-limit - 1) {
+      'c1.stdout{li ": String literal storage limit exceeded\n"}
+      'c.exit(#failure)
+   }
+   .cm1-bytecode.str[pos++] = 'char(value)
+}
+cm1-string-hex-value(c'char)'i32 {
+   if (&&, c >= ''0, c <= ''9) { return c - ''0 }
+   if (&&, c >= ''a, c <= ''f) { return (c - ''a) + 10 }
+   if (&&, c >= ''A, c <= ''F) { return (c - ''A) + 10 }
+   return -1
+}
+cm1-string-intern-candidate(start'u32, pos'u32, li'line-info, out-len'u32&)'u32 {
+   len' = pos - start
+   crc' = crc32c(0, &.cm1-bytecode.str[start], len)
+   loop i' = 0; .cm1-string-count; i++ {
+      if (&&, .cm1-string-crc32c-v[i] == crc, .cm1-string-len-v[i] == len,
+         'c.memcmp(&.cm1-bytecode.str[.cm1-string-offset-v[i]], &.cm1-bytecode.str[start], len) == 0) {
+         out-len = len
+         return .cm1-string-offset-v[i]
+      }
+   }
+   if .cm1-string-count == #string-limit {
+      'c1.stdout{li ": Too many unique string literals\n"}
+      'c.exit(#failure)
+   }
+   .cm1-bytecode.str[pos++] = ''\0
+   index' = .cm1-string-count++
+   .cm1-string-offset-v[index] = start
+   .cm1-string-len-v[index] = len
+   .cm1-string-crc32c-v[index] = crc
+   .cm1-string-pos = pos
+   out-len = len
+   return start
+}
+cm1-string-intern-decoded(decoded'char @const[], len'u32, li'line-info, out-len'u32&)'u32 {
+   start' = .cm1-string-pos
+   pos' = start
+   loop i' = 0; len; i++ {
+      cm1-string-put(pos, 'u8(decoded[i]), li)
+   }
+   return cm1-string-intern-candidate(start, pos, li, out-len)
+}
+cm1-string-intern-printf-text(decoded'char @const[], len'u32, li'line-info, out-len'u32&)'u32 {
+   start' = .cm1-string-pos
+   pos' = start
+   loop i' = 0; i < len; i++ {
+      c'char = decoded[i]
+      if (&&, c == ''%, (i + 1) < len, decoded[i + 1] == ''%) { i++ }
+      cm1-string-put(pos, 'u8(c), li)
+   }
+   return cm1-string-intern-candidate(start, pos, li, out-len)
+}
+cm1-string-intern(raw'char @const[], raw-len'u32, li'line-info, out-len'u32&)'u32 {
+   if (||, raw-len < 2, raw[0] != 'char(34), raw[raw-len - 1] != 'char(34)) {
+      'c1.stdout{li ": Invalid string literal\n"}
+      'c.exit(#failure)
+   }
+   start' = .cm1-string-pos
+   pos' = start
+   end' = raw-len - 1
+   loop i' = 1; i < end; {
+      c'u8 = 'u8(raw[i++])
+      if c != 92 {
+         cm1-string-put(pos, c, li)
+         continue
+      }
+      if i == end {
+         'c1.stdout{li ": Incomplete escape sequence in string literal\n"}
+         'c.exit(#failure)
+      }
+      escaped'u8 = 'u8(raw[i++])
+      if escaped == ''a {
+         cm1-string-put(pos, 7, li)
+      } elif escaped == ''b {
+         cm1-string-put(pos, 8, li)
+      } elif escaped == ''f {
+         cm1-string-put(pos, 12, li)
+      } elif escaped == ''n {
+         cm1-string-put(pos, 10, li)
+      } elif escaped == ''r {
+         cm1-string-put(pos, 13, li)
+      } elif escaped == ''t {
+         cm1-string-put(pos, 9, li)
+      } elif escaped == ''v {
+         cm1-string-put(pos, 11, li)
+      } elif (||, escaped == 34, escaped == 39, escaped == 63, escaped == 92) {
+         cm1-string-put(pos, escaped, li)
+      } elif (&&, escaped >= ''0, escaped <= ''7) {
+         value'u32 = escaped - ''0
+         digit-c' = 1
+         loop (&&, digit-c < 3, i < end) {
+            digit'u8 = 'u8(raw[i])
+            if (||, digit < ''0, digit > ''7) { break }
+            value = (value * 8) + (digit - ''0)
+            digit-c++
+            i++
+         }
+         if value > 255 {
+            'c1.stdout{li ": Octal escape is too large for a byte\n"}
+            'c.exit(#failure)
+         }
+         cm1-string-put(pos, value, li)
+      } elif escaped == ''x {
+         if i == end {
+            'c1.stdout{li ": Hexadecimal escape requires at least one digit\n"}
+            'c.exit(#failure)
+         }
+         value'u32 = 0
+         digit-c' = 0
+         loop i < end {
+            digit' = cm1-string-hex-value(raw[i])
+            if digit < 0 { break }
+            if value > ((255 - digit) / 16) {
+               'c1.stdout{li ": Hexadecimal escape is too large for a byte\n"}
+               'c.exit(#failure)
+            }
+            value = (value * 16) + digit
+            digit-c++
+            i++
+         }
+         if digit-c == 0 {
+            'c1.stdout{li ": Hexadecimal escape requires at least one digit\n"}
+            'c.exit(#failure)
+         }
+         cm1-string-put(pos, value, li)
+      } elif (||, escaped == ''u, escaped == ''U) {
+         hex-c' = 4
+         if escaped == ''U { hex-c = 8 }
+         if hex-c > (end - i) {
+            'c1.stdout{li ": Incomplete universal character escape\n"}
+            'c.exit(#failure)
+         }
+         codepoint'u32 = 0
+         loop j' = 0; hex-c; j++ {
+            digit' = cm1-string-hex-value(raw[i++])
+            if digit < 0 {
+               'c1.stdout{li ": Invalid universal character escape\n"}
+               'c.exit(#failure)
+            }
+            codepoint = (codepoint * 16) + digit
+         }
+         if (||, codepoint > 0x10ffff, (&&, codepoint >= 0xd800, codepoint <= 0xdfff)) {
+            'c1.stdout{li ": Invalid Unicode code point in string literal\n"}
+            'c.exit(#failure)
+         }
+         if codepoint <= 0x7f {
+            cm1-string-put(pos, codepoint, li)
+         } elif codepoint <= 0x7ff {
+            cm1-string-put(pos, 0xc0 | (codepoint >> 6), li)
+            cm1-string-put(pos, 0x80 | (codepoint & 0x3f), li)
+         } elif codepoint <= 0xffff {
+            cm1-string-put(pos, 0xe0 | (codepoint >> 12), li)
+            cm1-string-put(pos, 0x80 | ((codepoint >> 6) & 0x3f), li)
+            cm1-string-put(pos, 0x80 | (codepoint & 0x3f), li)
+         } else {
+            cm1-string-put(pos, 0xf0 | (codepoint >> 18), li)
+            cm1-string-put(pos, 0x80 | ((codepoint >> 12) & 0x3f), li)
+            cm1-string-put(pos, 0x80 | ((codepoint >> 6) & 0x3f), li)
+            cm1-string-put(pos, 0x80 | (codepoint & 0x3f), li)
+         }
+      } else {
+         'c1.stdout{li ": Unsupported escape sequence in string literal\n"}
+         'c.exit(#failure)
+      }
+   }
+   return cm1-string-intern-candidate(start, pos, li, out-len)
+}
+cfg-has-cm1'bool
+cfg-func-list'id
+output-type-name(f'c1'sprintf, type'type) {
+   if type.kind == #struct {
+      f.add{"struct " type.name}
+   } elif type.kind == #union {
+      f.add{"union " type.name}
+   } else {
+      f.add{type.name}
+   }
+}
+output-array-dims(f'c1'sprintf, array-dim-start'u32, array-dim-c'u32) {
+   loop i' = 0; array-dim-c; i++ {
+      f.add{"[" .array-dim-v[array-dim-start + i] "]"}
+   }
+}
+output-fields(f'c1'sprintf, type'type) {
+   field-v' = type.field-v
+   loop j' = 0; type.field-c; j++ {
+      field' = field-v[j]
+      type2' = field.type-src
+      f.add{"   "}
+      output-type-name(f, type2)
+      f.add{field.stars-src ''  field.name}
+      output-array-dims(f, field.array-dim-start, field.array-dim-c)
+      f.add{";\n"}
+   }
+}
+clear-memory-lexer()
+clear-memory-parser()
+clear-memory() {
+   clear-memory-lexer()
+   clear-memory-parser()
+   // Clear only the prefixes used by the previous compilation. Some entries
+   // contain pointers or flags which are not overwritten on every allocation.
+   id-c' = 'u32(.id-c)
+   'c.memset(.id-soa.crc32c, 0, id-c * 'u32['usz])
+   'c.memset(.id-soa.ptr, 0, id-c * 'ref['usz])
+   'c.memset(.id-soa.len, 0, id-c * 'u8['usz])
+
+   'c.memset(.cm1-data-mem, 0, .cm1-data-pos)
+   'c.memset(.decl-type-v, 0, .decl-c * 'decl-type['usz])
+   'c.memset(.decl-ptr-v, 0, .decl-c * 'ref['usz])
+   'c.memset(.type-v, 0, .type-c * 'type['usz])
+   'c.memset(.typename-id-v, 0, .typename-c * 'id['usz])
+   'c.memset(.typename-type-v, 0, .typename-c * 'ref['usz])
+   'c.memset(.gvar-v, 0, .gvar-c * 'gvar['usz])
+   'c.memset(.gvar-name-v, 0, .gvar-c * 'id['usz])
+   'c.memset(.array-dim-v, 0, .array-dim-count * 'u32['usz])
+   'c.memset(.field-v, 0, .field-c * 'field['usz])
+   // field-mem-c is stored as a byte count.
+   'c.memset(.field-mem-v, 0, .field-mem-c)
+
+   'c.memset(.func-v, 0, .func-c * 'func['usz])
+   'c.memset(.func-name-v, 0, .func-c * 'id['usz])
+   'c.memset(.func-decl-arg-v, 0, .func-decl-arg-c * 'func-decl-arg['usz])
+
+   'c.memset(.expr-str-v, 0, .expr-str-c * 'expr-string['usz])
+   loop i' = 0; .expr-call-stack-depth; i++ {
+      'c.memset(.expr-call-stack-v[i], 0, .expr-call-stack-c[i] * 'ref['usz])
+   }
+   'c.memset(.expr-call-stack-c, 0, .expr-call-stack-depth * 'u8['usz])
+
+   'c.memset(.space-v, 0, .space-c * 'space['usz])
+   'c.memset(.space-stack-v, 0, .space-stack-c * 'ref['usz])
+   'c.memset(.lvar-v, 0, .lvar-c * 'lvar['usz])
+   'c.memset(.lvar-name-id-v, 0, .lvar-name-c * 'id['usz])
+   'c.memset(.lvar-name-idx-v, 0, .lvar-name-c * 'u16['usz])
+   'c.memset(.lvar-name-space-v, 0, .lvar-name-c * 'u16['usz])
+   'c.memset(.if-stack-v, 0, .if-stack-c * 'ref['usz])
+   'c.memset(.named-label-v, 0, .named-label-c * 'named-label-entry['usz])
+   'c.memset(.goto-jump-v, 0, .goto-jump-c * 'goto-jump-entry['usz])
+   'c.memset(.control-stack-v, 0, .control-stack-c * 'control-frame['usz])
+   'c.memset(.break-jump-v, 0, .break-jump-c * 'ref['usz])
+   'c.memset(.continue-jump-v, 0, .continue-jump-c * 'ref['usz])
+   'c.memset(.switch-stack-v, 0, .switch-stack-c * 'ref['usz])
+
+   bytecode-start'rdr. = ?
+   bytecode-start.ref = .cm1-bytecode.buf
+   if .cm1-bytecode-wtr.pos > bytecode-start.pos {
+      'c.memset(
+         .cm1-bytecode.buf,
+         0,
+         .cm1-bytecode-wtr.pos - bytecode-start.pos
+      )
+   }
+   offset-byte-c' = (.func-bc-idx + 1) * 'u32['usz]
+   offset-start'rdr. = ?
+   offset-start.ref = .cm1-bytecode.buf
+   offset-start.pos -= offset-byte-c
+   'c.memset(offset-start.ref, 0, offset-byte-c)
+   'c.memset(.cm1-bytecode.str, 0, .cm1-string-pos)
+   'c.memset(.cm1-string-offset-v, 0, .cm1-string-count * 'u32['usz])
+   'c.memset(.cm1-string-len-v, 0, .cm1-string-count * 'u32['usz])
+   'c.memset(.cm1-string-crc32c-v, 0, .cm1-string-count * 'u32['usz])
+
+   .printed-error = false
+   .cfg-has-cm1 = false
+   .cfg-func-list = #nil
+   .id-printf = #nil
+   .id-c = 'id(0)
+   .cm1-data-pos = 0
+   .decl-c = 0
+   .type-c = 0
+   .typename-c = 0
+   .gvar-c = 0
+   .array-dim-count = 0
+   .field-c = 0
+   .field-mem-c = 0
+   .field-offset = 0
+   .field-max-size = 0
+   .field-max-align = 0
+   .func-c = 0
+   .func-decl-arg-c = 0
+   .func-c-idx = 0
+   .func-bc-idx = 0
+   .func-arg-start = 0
+   .func-arg-c = 0
+   .func-lvar-stack-c = 0
+   .func = null
+   .func-type = null
+   .func-name = #nil
+   .func-is-bytecode = false
+   .declarator-type = null
+   .declarator-extern = false
+   .current-type = null
+   .current-stars = #0
+   .expr-str-c = 0
+   .expr-discard-bytecode-depth = 0
+   .expr-call-stack-depth = 0
+   .space-c = 0
+   .space-stack-c = 0
+   .lvar-c = 0
+   .lvar-name-c = 0
+   .if-stack-c = 0
+   .named-label-c = 0
+   .goto-jump-c = 0
+   .control-stack-c = 0
+   .break-jump-c = 0
+   .continue-jump-c = 0
+   .switch-stack-c = 0
+   .cm1-bytecode-wtr.ref = null
+   .cm1-string-pos = 0
+   .cm1-string-count = 0
+}
+id-printf'id
+main(arg-c'cint, arg-v'char @const[][])'cint {
+   if false {
+      export()
+   }
+
+   if arg-c != 5 {
+      'c1.stdout{"Usage: " arg-v[0] " <input-file.cm1.c> <input-file.cm1.cfg> <output-file.c> <output-file.cm1>\n"}
+      'c.exit(#failure)
+   }
+   in-path' = arg-v[1]
+   cfg-path' = arg-v[2]
+   out-path' = arg-v[3]
+   cm1-path' = arg-v[4]
+
+   fd' = 'x.open(cfg-path, #rdonly)
+   if fd == #nil {
+      'c1.stdout{"Cannot read file: " cfg-path "\n"}
+      'c.exit(#failure)
+   }
+   cfg-len' = fd.seek(0, #end)
+   fd.seek(0, #set)
+   cfg-data'char[] = .input-mem
+   fd.read(cfg-data, cfg-len)
+   fd.close()
+   cfg-data[cfg-len] = ''\n
+   cfg-data[cfg-len + 1] = ''\0
+   cfg-pos' = ?
+   if (&&, cfg-data[0] == ''C, cfg-data[1] == ''M, cfg-data[2] == ''1, cfg-data[3] == ''\n) {
+      .cfg-has-cm1 = true
+      cfg-pos = 4
+   } elif (&&, cfg-data[0] == ''C, cfg-data[1] == ''\n) {
+      cfg-pos = 2
+   } else {
+      'c1.stdout{"The file " cfg-path " must begin with either 'CM1' or 'C' followed by a new line\n"}
+      'c.exit(#failure)
+   }
+   loop {
+      line-begin' = cfg-pos
+      loop {
+         if cfg-data[cfg-pos] == ''\0 {
+            "goto cfg_func_list_end;"
+         }
+         if cfg-data[cfg-pos] == ''\n {
+            break
+         }
+         cfg-pos++
+      }
+      line-len' = cfg-pos - line-begin
+      if line-len == 0 { break }
+      id-get(&cfg-data[line-begin], line-len) // Create an id for the function name
+      cfg-pos++ // Skip the new line
+   }
+   "cfg_func_list_end:;"
+   .cfg-func-list = .id-c
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("void", 4)
+      type.kind = #void
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("int8_t", 6)
+      type.kind = #i8
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("uint8_t", 7)
+      type.kind = #u8
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("int16_t", 7)
+      type.kind = #i16
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("uint16_t", 8)
+      type.kind = #u16
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("int32_t", 7)
+      type.kind = #i32
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("uint32_t", 8)
+      type.kind = #u32
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("int64_t", 7)
+      type.kind = #i64
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("uint64_t", 8)
+      type.kind = #u64
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("float", 5)
+      type.kind = #f32
+   }
+
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("double", 6)
+      type.kind = #f64
+   }
+
+   .id-printf = id-get("printf", 6)
+
+   .cm1-bytecode-wtr.ref = .cm1-bytecode.buf
+   parse(in-path)
+
+   if true { // Write C file
+      'c1.sprintf(.c-code-buf, f?)
+      f.len += 12 // Leave space for the crc32c comment
+      f.add{cm1-h(), cm1-h-len()}
+      decl-c' = .decl-c
+      loop i' = 0; i < decl-c; i++ {
+         switch .decl-type-v[i] {
+            case #aggregate-forward {
+               type'type = .decl-ptr-v[i]
+               output-type-name(f, type)
+               f.add{";\n"}
+            }
+            case #aggregate {
+               type'type = .decl-ptr-v[i]
+               output-type-name(f, type)
+               f.add{" {\n"}
+               output-fields(f, type)
+               f.add{"};\n"}
+            }
+            case #gvar {
+               gvar'gvar = .decl-ptr-v[i]
+               type' = gvar.type-src
+               if type.is-aggregate() {
+                     if (&&, gvar.stars-final == #0, type.field-v == null) {
+                        'c1.stdout{gvar.info ": Struct or union '" type.name "' was used but it was never defined\n"}
+                        'c.exit(#failure)
+                     }
+                     output-type-name(f, type)
+                     f.add{gvar.stars-src ''  gvar.name()}
+               } elif type.kind == #typedef {
+                     type2' = gvar.type-final
+                     if (&&, type2.is-aggregate(), gvar.stars-final == #0, type2.field-v == null) {
+                        'c1.stdout{gvar.info ": Struct or union '" gvar.type-src.name "' was used but it was never defined\n"}
+                        'c.exit(#failure)
+                     }
+                     f.add{type.name gvar.stars-src ''  gvar.name()}
+               } else {
+                     f.add{type.name gvar.stars-src ''  gvar.name()}
+               }
+               output-array-dims(f, gvar.array-dim-start, gvar.array-dim-c)
+               f.add{";\n"}
+            }
+            case #func-forward {
+               func'func = .decl-ptr-v[i]
+               type' = func.type-src
+               stars' = func.stars-src
+               // A runtime header may expose the function through a macro (for
+               // example, fortified versions of memcpy). In that case the
+               // header already supplies its declaration, and spelling the
+               // declaration again would expand the macro in invalid syntax.
+               f.add{"#ifndef " func.name() "\n"}
+               output-type-name(f, type)
+               f.add{stars ''  func.name() ''(}
+               arg-start' = func.arg-start
+               loop j' = 0; func.arg-c; j++ {
+                  if j != 0 {
+                     f.add{", "}
+                  }
+                  farg' = .func-decl-arg-v[arg-start + j]
+                  type2' = farg.type-src
+                  stars2' = farg.stars-src
+                  output-type-name(f, type2)
+                  f.add{''  stars2 farg.name}
+               }
+               f.add{");\n#endif\n"}
+            }
+            case #typedef-aggregate {
+               type'type = .decl-ptr-v[i]
+               f.add{"typedef "}
+               if type.kind == #union {
+                  f.add{"union"}
+               } else {
+                  f.add{"struct"}
+               }
+               f.add{" {\n"}
+               output-fields(f, type)
+               f.add{"}"}
+               first' = true
+               loop (i + 1) < decl-c {
+                  if .decl-type-v[i + 1] != #typedef-name { break }
+                  i++
+                  type2'type = .decl-ptr-v[i]
+                  if first {
+                     first = false
+                     f.add{''  type2.stars() type2.name}
+                  } else {
+                     f.add{", " type2.stars() type2.name}
+                  }
+               }
+               f.add{";\n"}
+            }
+            case #typedef {
+               type'type = .decl-ptr-v[i]
+               stars-minus'
+               if type.is-aggregate() {
+                  f.add{"typedef "}
+                  output-type-name(f, type)
+               } else {
+                  f.add{"typedef " type.name}
+                  stars-minus = type.stars()
+               }
+               first' = true
+               loop (i + 1) < decl-c {
+                  if .decl-type-v[i + 1] != #typedef-name { break }
+                  i++
+                  type2'type = .decl-ptr-v[i]
+                  if first {
+                     first = false
+                     f.add{''  type2.stars() - stars-minus type2.name}
+                  } else {
+                     f.add{", " type2.stars() - stars-minus type2.name}
+                  }
+               }
+               f.add{";\n"}
+            }
+            case #func {
+               func'func = .decl-ptr-v[i]
+               if func.cm1 {
+                  type' = func.type-src
+                  stars' = func.stars-src
+                  output-type-name(f, type)
+                  f.add{stars ''  func.name() ''(}
+                  arg-start' = func.arg-start
+                  loop j' = 0; func.arg-c; j++ {
+                     if j != 0 {
+                        f.add{", "}
+                     }
+                     farg' = .func-decl-arg-v[arg-start + j]
+                     type2' = farg.type-src
+                     stars2' = farg.stars-src
+                     output-type-name(f, type2)
+                     f.add{''  stars2 farg.name}
+                  }
+                  f.add{") {\n"}
+                  loop j' = 0; func.arg-c; j++ {
+                     farg' = .func-decl-arg-v[arg-start + j]
+                     type2' = farg.type-final
+                     stars2' = farg.stars-final
+                     if stars2 == #0 {
+                        if type2.is-aggregate() {
+                           f.add{"   cm1_push_ptr(&" farg.name ");\n"}
+                        } elif type2.is-integer() {
+                           if type2.is-signed-integer() {
+                              f.add{"   cm1_push_i(" farg.name ");\n"}
+                           } else {
+                              f.add{"   cm1_push_u(" farg.name ");\n"}
+                           }
+                        } elif type2.kind == #f32 {
+                           f.add{"   cm1_push_f32(" farg.name ");\n"}
+                        } elif type2.kind == #f64 {
+                           f.add{"   cm1_push_f64(" farg.name ");\n"}
+                        }
+                     } else {
+                        f.add{"   cm1_push_ptr(" farg.name ");\n"}
+                     }
+                  }
+                  f.add{"   cm1_run(" func.func-idx ");\n"}
+                  if func.stars-final == #0 {
+                     type2' = func.type-final
+                     if type2.is-aggregate() {
+                        f.add{"   return *("}
+                        output-type-name(f, type2)
+                        f.add{"*)cm1_pop_ptr();\n"}
+                     } elif type2.is-integer() {
+                        if type2.is-signed-integer() {
+                           f.add{"   return cm1_pop_i64();\n"}
+                        } else {
+                           f.add{"   return cm1_pop_u64();\n"}
+                        }
+                     } elif type2.kind == #f32 {
+                        f.add{"   return cm1_pop_f32();\n"}
+                     } elif type2.kind == #f64 {
+                        f.add{"   return cm1_pop_f64();\n"}
+                     } elif type2.kind == #void {
+                        f.add{"   (void)cm1_pop_ptr();\n"}
+                     }
+                  } else {
+                     f.add{"   return cm1_pop_ptr();\n"}
+                  }
+                  f.add{"}\n"}
+                  continue
+               }
+               if func.code == null { continue }
+               code'char @const[] = func.code
+               type' = func.type-src
+               stars' = func.stars-src
+               output-type-name(f, type)
+               f.add{stars ''  func.name() ''(}
+               arg-start' = func.arg-start
+               loop j' = 0; func.arg-c; j++ {
+                  if j != 0 {
+                     f.add{", "}
+                  }
+                  farg' = .func-decl-arg-v[arg-start + j]
+                  type2' = farg.type-src
+                  stars2' = farg.stars-src
+                  output-type-name(f, type2)
+                  f.add{''  stars2 farg.name}
+               }
+               f.add{") " code, func.code-len "\n"}
+            }
+         }
+      }
+      f.add{"void* cm1_gvar(uint16_t var_idx) {\n"}
+      f.add{"   switch (var_idx) {\n"}
+      loop i' = 0; .gvar-c; i++ {
+         gvar' = .gvar-v[i]
+         f.add{"      case " i ": {\n"}
+         if gvar.stars-final == #0 {
+            f.add{"         return &" gvar.name() ";\n"}
+         } else {
+            f.add{"         return " gvar.name() ";\n"}
+         }
+         f.add{"      }\n"}
+      }
+      f.add{"   }\n"}
+      f.add{"   return NULL;\n"}
+      f.add{"}\n"}
+      f.add{"void cm1_run_c(uint16_t func_idx) {\n"}
+      f.add{"   switch (func_idx) {\n"}
+      loop i' = 0; .func-c; i++ {
+         func' = .func-v[i]
+         if func.cm1 { continue }
+         f.add{"      case " func.func-idx ": {\n"}
+         arg-start' = func.arg-start
+         farg-c' = func.arg-c
+         loop j' = farg-c; farg-c; {
+            j--
+            farg' = .func-decl-arg-v[arg-start + j]
+            type' = farg.type-final
+            stars' = farg.stars-final
+            if stars == #0 {
+               if type.is-aggregate() {
+                  f.add{"         "}
+                  output-type-name(f, farg.type-src)
+                  f.add{" arg" j " = *("}
+                  output-type-name(f, farg.type-src)
+                  f.add{"*)cm1_pop_ptr();\n"}
+               } else {
+                  switch type.kind {
+                     case #i8 {
+                        f.add{"         int8_t arg" j " = cm1_pop_i64();\n"}
+                     }
+                     case #i16 {
+                        f.add{"         int16_t arg" j " = cm1_pop_i64();\n"}
+                     }
+                     case #i32 {
+                        f.add{"         int32_t arg" j " = cm1_pop_i64();\n"}
+                     }
+                     case #i64 {
+                        f.add{"         int64_t arg" j " = cm1_pop_i64();\n"}
+                     }
+                     case #u8 {
+                        f.add{"         uint8_t arg" j " = cm1_pop_u64();\n"}
+                     }
+                     case #u16 {
+                        f.add{"         uint16_t arg" j " = cm1_pop_u64();\n"}
+                     }
+                     case #u32 {
+                        f.add{"         uint32_t arg" j " = cm1_pop_u64();\n"}
+                     }
+                     case #u64 {
+                        f.add{"         uint64_t arg" j " = cm1_pop_u64();\n"}
+                     }
+                     case #f32 {
+                        f.add{"         float arg" j " = cm1_pop_f32();\n"}
+                     }
+                     case #f64 {
+                        f.add{"         double arg" j " = cm1_pop_f64();\n"}
+                     }
+                  }
+               }
+            } else {
+               f.add{"         void* arg" j " = cm1_pop_ptr();\n"}
+            }
+         }
+         type' = func.type-final
+         kind' = type.kind
+         stars' = func.stars-final
+         if stars == #0 {
+            if kind == #void {
+               f.add{"         "}
+            } elif type.is-aggregate() {
+               f.add{"         "}
+               output-type-name(f, func.type-src)
+               f.add{" ret = "}
+            } elif type.is-arithmetic() {
+               f.add{"         "}
+               output-type-name(f, func.type-src)
+               f.add{" ret = "}
+            } else {
+               f.add{"         int32_t ret = "}
+            }
+         } else {
+            f.add{"         void* ret = "}
+         }
+         f.add{func.name() ''(}
+         loop j' = 0; farg-c; j++ {
+            if j != 0 {
+               f.add{", "}
+            }
+            f.add{"arg" j}
+         }
+         f.add{");\n"}
+         if stars == #0 {
+            if type.is-aggregate() {
+               f.add{"         cm1_push_ptr(&ret);\n"}
+            } elif kind == #void {
+               f.add{"         cm1_push_ptr(0);\n"}
+            } elif type.is-signed-integer() {
+               f.add{"         cm1_push_i(ret);\n"}
+            } elif type.is-integer() {
+               f.add{"         cm1_push_u(ret);\n"}
+            } elif kind == #f32 {
+               f.add{"         cm1_push_f32(ret);\n"}
+            } elif kind == #f64 {
+               f.add{"         cm1_push_f64(ret);\n"}
+            }
+         } else {
+            f.add{"         cm1_push_ptr(ret);\n"}
+         }
+         f.add{"         break;\n"}
+         f.add{"      }\n"}
+      }
+      f.add{"   }\n"}
+      f.add{"}\n"}
+      f.add{cm1-c(), cm1-c-len()}
+
+      f-len' = f.len
+      crc32c' = crc32c(0, &.c-code-buf[12], f-len - 12)
+      .c-code-buf[0] = ''/
+      .c-code-buf[1] = ''/
+      .c-code-buf[2] = '' 
+      crc32c-v'u8[] = &crc32c
+      loop i' = 3, j' = 3; 4; {
+         n' = crc32c-v[i--]
+         a' = n >> 4
+         if a < 10 {
+            .c-code-buf[j++] = ''0 + a
+         } else {
+            .c-code-buf[j++] = ''a + (a - 10)
+         }
+         a = n & 15
+         if a < 10 {
+            .c-code-buf[j++] = ''0 + a
+         } else {
+            .c-code-buf[j++] = ''a + (a - 10)
+         }
+      }
+      .c-code-buf[3 + 8] = ''\n
+      write' = true
+      fd = 'x.open(out-path, #rdonly)
+      if fd != #nil {
+         header'char[12]
+         fd.read(header, 12)
+         if 'c.memcmp(header, .c-code-buf, 12) == 0 {
+            write = false
+            "#ifndef __EMSCRIPTEN__"
+            'c1.stdout{out-path " did not change\n"}
+            "#endif"
+         }
+         fd.close()
+      }
+      if write {
+         fd = 'x.open(out-path, #create | #truncate | #wronly, 0o644)
+         fd.write(.c-code-buf, f-len)
+         fd.close()
+      }
+   }
+
+   if true { // Write the bytecodes to cm1-path
+      r1'rdr. = ?
+      r1.ref = .cm1-bytecode.buf
+      offset-start' = .func-bc-idx * 4
+      r2'rdr. = ?
+      r2.ref = .cm1-bytecode.buf
+      r2.pos -= offset-start + 4 // +4 for the crc32c
+      offset-v'u32[] = r2.ref
+      loop i' = 0, j' = 1; .func-c; i++ {
+         func' = .func-v[i]
+         if !func.cm1 { continue }
+         if func.code == null {
+            'c1.stdout{func.info ": The function '" func.name() "' has no code.\n"}
+            'c.exit(#failure)
+         }
+         r2.ref = func.code
+         offset-v[j++] = (r2.pos - r1.pos) + offset-start
+      }
+      r2.ref = .cm1-bytecode-wtr.ref
+      bc-len' = r2.pos - r1.pos
+      string-start' = offset-start + bc-len
+      loop i' = 0; .expr-str-c; i++ {
+         expr'expr-string = .expr-str-v[i]
+         if expr.bytecode-offset != null {
+            expr.bytecode-offset[0] = string-start + expr.str-offset
+         }
+      }
+      crc32c-new' = crc32c(0, &offset-v[1], offset-start + bc-len)
+      crc32c-new = crc32c(crc32c-new, .cm1-bytecode.str, .cm1-string-pos)
+      offset-v[0] = crc32c-new
+      write' = true
+      fd = 'x.open(cm1-path, #rdonly)
+      if fd != #nil {
+         crc32c-old'u32 = ?
+         if (&&, fd.read(&crc32c-old, 'u32['usz]) == 4, crc32c-old == crc32c-new) {
+            write = false
+            "#ifndef __EMSCRIPTEN__"
+            'c1.stdout{cm1-path " did not change\n"}
+            "#endif"
+         }
+         fd.close()
+      }
+      
+      if write {
+         fd = 'x.open(cm1-path, #create | #truncate | #wronly, 0o644)
+         if fd == #nil {
+            'c1.stdout{"Cannot write file: " cm1-path "\n"}
+            'c.exit(#failure)
+         }
+         fd.write(offset-v, offset-start + 4 + bc-len)
+         fd.write(.cm1-bytecode.str, .cm1-string-pos)
+         fd.close()
+      }
+   }
+   return 0
+}
+}
+using 'libcp1 {
+   using 'fmt {
+      f-reserve<id'cm1'id>(fmt'this, f'f-cstr) {
+         if id == #nil {
+            nil' = "<nil>"
+            fmt.f-reserve-arr<nil>(5, f)
+         } else {
+            fmt.f-reserve-arr<id[]ptr>(id[]len, f)
+         }
+      }
+      f-reserve<id'cm1'stars>(fmt'this, f'f-cstr) {
+         stars' = "************************************************************************"
+         fmt.f-reserve-arr<stars>('base(id), f)
+      }
+      f-reserve<op'cm1'op>(fmt'this, f'f-cstr) {
+         fmt.f-reserve-arr<op.cp1-name()>(f)
+      }
+      f-reserve<kind'cm1'type-kind>(fmt'this, f'f-cstr) {
+         fmt.f-reserve-arr<kind.cp1-name()>(f)
+      }
+      f-reserve<kind'cm1'stmt-type>(fmt'this, f'f-cstr) {
+         fmt.f-reserve-arr<kind.cp1-name()>(f)
+      }
+      f-reserve<type'cm1'expr-type>(fmt'this, f'f-cstr) {
+         fmt.f-reserve-arr<type.cp1-name()>(f)
+      }
+      f-reserve<expr'cm1'expr>(fmt'this, f'f-cm1-line-info) {
+         fmt.f-reserve<expr.info>(f)
+      }
+      f-reserve<li'cm1'line-info>(fmt'this, f'f-cm1-line-info) {
+         fmt.f-reserve-arr<li.path>(f.path)
+         fmt.cap++ // For the colon
+         fmt.f-reserve<li.row>(f.row)
+         fmt.cap++ // For the colon
+         fmt.f-reserve<li.col>(f.col)
+      }
+      struct 'f-cm1-line-info[path'f-cstr., row'f-u32., col'f-u32.] {
+         f(f'this, fmt'fmt) {
+            f.path.f(fmt)
+            fmt.ptr[fmt.len++] = '':
+            f.row.f(fmt)
+            fmt.ptr[fmt.len++] = '':
+            f.col.f(fmt)
+         }
+      }
+   }
+}

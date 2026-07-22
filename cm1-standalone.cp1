@@ -1,0 +1,3 @@
+main(arg-c'cint, arg-v'char @const[][])'cint {
+   return 'cm1.main(arg-c, arg-v)
+}

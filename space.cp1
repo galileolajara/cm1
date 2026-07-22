@@ -1,0 +1,467 @@
+'c1 = 'libcp1
+'c = 'libc
+using 'cm1 {
+struct 'space[first'stmt, last'stmt, lvar-c'u16] {
+   output(space'this) {
+      .space-stack-v[.space-stack-c++] = space
+      first-if'stmt-if = null
+      stmt-base' = space.first
+      loop stmt-base != null {
+         switch stmt-base.type {
+            case #expr {
+               stmt'stmt-expr = stmt-base
+               stmt.expr.output(stars-c?, stars-bc?)
+               bc-op(#pop)
+            }
+            case #return {
+               stmt'stmt-return = stmt-base
+               if stmt.expr == null {
+                  if (&&, .func.type-final.kind == #void, .func.stars-final == #0) {
+                     bc-op(#return)
+                  } else {
+                     'c1.stdout{stmt-base.info ": Cannot return without a value because the function has a return type\n"}
+                     'c.exit(#failure)
+                  }
+               } else {
+                  if (&&, .func.type-final.kind == #void, .func.stars-final == #0) {
+                     'c1.stdout{stmt-base.info ": Cannot return with a value because the function has no return type\n"}
+                     'c.exit(#failure)
+                  } else {
+                     type' = stmt.expr.output(stars-c?, stars-bc?)
+                     scalar-convert-assignment(type, stars-c, .func.type-final, .func.stars-final, stmt-base.info)
+                     bc-op(#pop-return)
+                  }
+               }
+            }
+            case #if {
+               stmt'stmt-if = stmt-base
+               first-if = stmt
+               stmt-if-output(stmt)
+               if stmt.next == null {
+                  stmt-if-patch-end(first-if)
+                  first-if = null
+               }
+            }
+            case #elif {
+               stmt'stmt-if = stmt-base
+               stmt-if-output(stmt)
+               if stmt.next == null {
+                  stmt-if-patch-end(first-if)
+                  first-if = null
+               }
+            }
+            case #else {
+               stmt'stmt-else = stmt-base
+               stmt.space.output()
+               stmt-if-patch-end(first-if)
+               first-if = null
+            }
+            case #block {
+               stmt'stmt-block = stmt-base
+               stmt.space.output()
+            }
+            case #while {
+               stmt'stmt-loop = stmt-base
+               stmt-while-output(stmt)
+            }
+            case #do-while {
+               stmt'stmt-loop = stmt-base
+               stmt-do-while-output(stmt)
+            }
+            case #for {
+               stmt'stmt-loop = stmt-base
+               stmt-for-output(stmt)
+            }
+            case #switch {
+               stmt'stmt-switch = stmt-base
+               stmt-switch-output(stmt)
+            }
+            case #case {
+               stmt'stmt-label = stmt-base
+               stmt-label-output(stmt)
+            }
+            case #default {
+               stmt'stmt-label = stmt-base
+               stmt-label-output(stmt)
+            }
+            case #break {
+               control-output-break(stmt-base.info)
+            }
+            case #continue {
+               control-output-continue(stmt-base.info)
+            }
+            case #named-label {
+               stmt'stmt-named-label = stmt-base
+               stmt-named-label-output(stmt)
+            }
+            case #goto {
+               stmt'stmt-goto = stmt-base
+               stmt-goto-output(stmt)
+            }
+            default {
+               'c1.stdout{stmt-base.info ": Method .output() on statement #" stmt-base.type " is not yet implemented\n"}
+               'c.exit(#failure)
+            }
+         }
+         stmt-base = stmt-base.next
+      }
+      .space-stack-c--
+   }
+}
+bc-jump-begin(op'op)'u32[] {
+   bc-op(op)
+   ptr' = .cm1-bytecode-wtr.p4
+   bc-n32(0)
+   return ptr
+}
+bc-jump-set(ptr'u32[], target'usz) {
+   r'rdr. = ?
+   r.p4 = ptr
+   r.pos += 'u32['usz]
+   ptr[0] = 'u32(target - r.pos)
+}
+bc-jump-end(ptr'u32[]) {
+   bc-jump-set(ptr, .cm1-bytecode-wtr.pos)
+}
+bc-jump-to(op'op, target'usz) {
+   ptr' = bc-jump-begin(op)
+   bc-jump-set(ptr, target)
+}
+#named-label-limit = 1024 * 16
+#goto-jump-limit = 1024 * 16
+struct 'named-label-entry[name'id, info'line-info., bytecode-pos'usz]
+struct 'goto-jump-entry[name'id, info'line-info., jump-ptr'u32[]]
+named-label-v'named-label-entry.[#named-label-limit]
+named-label-c'u32
+goto-jump-v'goto-jump-entry.[#goto-jump-limit]
+goto-jump-c'u32
+stmt-named-label-output(stmt'stmt-named-label) {
+   loop i' = 0; .named-label-c; i++ {
+      label' = .named-label-v[i]
+      if label.name == stmt.name {
+         'c1.stdout{stmt.base.info ": Label '" stmt.name "' was already defined at " label.info "\n"}
+         'c.exit(#failure)
+      }
+   }
+   if .named-label-c == #named-label-limit {
+      'c1.stdout{stmt.base.info ": Too many labels in function\n"}
+      'c.exit(#failure)
+   }
+   label' = .named-label-v[.named-label-c++]
+   label.name = stmt.name
+   label.info.copy-from(stmt.base.info)
+   label.bytecode-pos = .cm1-bytecode-wtr.pos
+}
+stmt-goto-output(stmt'stmt-goto) {
+   if .goto-jump-c == #goto-jump-limit {
+      'c1.stdout{stmt.base.info ": Too many goto statements in function\n"}
+      'c.exit(#failure)
+   }
+   jump' = .goto-jump-v[.goto-jump-c++]
+   jump.name = stmt.name
+   jump.info.copy-from(stmt.base.info)
+   jump.jump-ptr = bc-jump-begin(#jump)
+}
+stmt-goto-resolve() {
+   loop i' = 0; .goto-jump-c; i++ {
+      jump' = .goto-jump-v[i]
+      found'bool = false
+      loop j' = 0; .named-label-c; j++ {
+         label' = .named-label-v[j]
+         if label.name == jump.name {
+            bc-jump-set(jump.jump-ptr, label.bytecode-pos)
+            found = true
+            break
+         }
+      }
+      if !found {
+         'c1.stdout{jump.info ": Goto references undefined label '" jump.name "'\n"}
+         'c.exit(#failure)
+      }
+   }
+   .named-label-c = 0
+   .goto-jump-c = 0
+}
+#control-stack-limit = 128
+#control-jump-limit = 1024 * 16
+enum 'control-kind[#loop, #switch]'u8
+struct 'control-frame[kind'control-kind, break-start'u32, continue-start'u32]
+control-stack-v'control-frame.[#control-stack-limit]
+control-stack-c'u8
+break-jump-v'u32[#control-jump-limit][]
+break-jump-c'u32
+continue-jump-v'u32[#control-jump-limit][]
+continue-jump-c'u32
+switch-stack-v'stmt-switch[#control-stack-limit]
+switch-stack-c'u8
+control-output-push(kind'control-kind) {
+   frame' = .control-stack-v[.control-stack-c++]
+   frame.kind = kind
+   frame.break-start = .break-jump-c
+   frame.continue-start = .continue-jump-c
+}
+control-output-break(li'line-info) {
+   if .control-stack-c == 0 {
+      'c1.stdout{li ": 'break' statement is not inside a loop or switch\n"}
+      'c.exit(#failure)
+   }
+   .break-jump-v[.break-jump-c++] = bc-jump-begin(#jump)
+}
+control-output-continue(li'line-info) {
+   i' = .control-stack-c
+   loop i > 0 {
+      i--
+      if .control-stack-v[i].kind == #loop {
+         .continue-jump-v[.continue-jump-c++] = bc-jump-begin(#jump)
+         return
+      }
+   }
+   'c1.stdout{li ": 'continue' statement is not inside a loop\n"}
+   'c.exit(#failure)
+}
+control-output-pop(break-target'usz, continue-target'usz, has-continue'bool) {
+   frame' = .control-stack-v[.control-stack-c - 1]
+   loop i' = frame.break-start; .break-jump-c - frame.break-start; i++ {
+      bc-jump-set(.break-jump-v[i], break-target)
+   }
+   .break-jump-c = frame.break-start
+   if has-continue {
+      loop i' = frame.continue-start; .continue-jump-c - frame.continue-start; i++ {
+         bc-jump-set(.continue-jump-v[i], continue-target)
+      }
+      .continue-jump-c = frame.continue-start
+   }
+   .control-stack-c--
+}
+stmt-if-output(stmt'stmt-if) {
+   type' = stmt.expr.output(stars-c?, stars-bc?)
+   if (&&, stars-c == #0, !type.is-arithmetic()) {
+      'c1.stdout{stmt.expr.info ": If condition must have a scalar type\n"}
+      'c.exit(#failure)
+   }
+   bc-scalar-to-bool(type, stars-c)
+   next-jump-ptr' = bc-jump-begin(#jump-if-zero)
+   stmt.space.output()
+   if stmt.next != null {
+      stmt.prev-jump-ptr = bc-jump-begin(#jump)
+   }
+   bc-jump-end(next-jump-ptr)
+}
+stmt-if-patch-end(stmt'stmt-if) {
+   loop stmt != null {
+      if stmt.prev-jump-ptr != null {
+         bc-jump-end(stmt.prev-jump-ptr)
+      }
+      stmt-base' = stmt.next
+      if (||, stmt-base == null, stmt-base.type == #else) {
+         return
+      }
+      stmt = 'stmt-if(stmt-base)
+   }
+}
+stmt-loop-condition-output(expr'expr) {
+   type' = expr.output(stars-c?, stars-bc?)
+   if (&&, stars-c == #0, !type.is-arithmetic()) {
+      'c1.stdout{expr.info ": Loop condition must have a scalar type\n"}
+      'c.exit(#failure)
+   }
+   bc-scalar-to-bool(type, stars-c)
+}
+stmt-while-output(stmt'stmt-loop) {
+   control-output-push(#loop)
+   loop-pos' = .cm1-bytecode-wtr.pos
+   stmt-loop-condition-output(stmt.expr)
+   end-jump-ptr' = bc-jump-begin(#jump-if-zero)
+   stmt.space.output()
+   bc-jump-to(#jump, loop-pos)
+   bc-jump-end(end-jump-ptr)
+   control-output-pop(.cm1-bytecode-wtr.pos, loop-pos, true)
+}
+stmt-do-while-output(stmt'stmt-loop) {
+   control-output-push(#loop)
+   loop-pos' = .cm1-bytecode-wtr.pos
+   stmt.space.output()
+   continue-pos' = .cm1-bytecode-wtr.pos
+   stmt-loop-condition-output(stmt.expr)
+   end-jump-ptr' = bc-jump-begin(#jump-if-zero)
+   bc-jump-to(#jump, loop-pos)
+   bc-jump-end(end-jump-ptr)
+   control-output-pop(.cm1-bytecode-wtr.pos, continue-pos, true)
+}
+stmt-for-output(stmt'stmt-loop) {
+   control-output-push(#loop)
+   condition-pos' = .cm1-bytecode-wtr.pos
+   end-jump-ptr'u32[] = null
+   if stmt.expr != null {
+      stmt-loop-condition-output(stmt.expr)
+      end-jump-ptr = bc-jump-begin(#jump-if-zero)
+   }
+   stmt.space.output()
+   continue-pos' = .cm1-bytecode-wtr.pos
+   if stmt.post != null {
+      stmt.post.output(stars-c?, stars-bc?)
+      bc-op(#pop)
+   }
+   bc-jump-to(#jump, condition-pos)
+   if end-jump-ptr != null {
+      bc-jump-end(end-jump-ptr)
+   }
+   control-output-pop(.cm1-bytecode-wtr.pos, continue-pos, true)
+}
+stmt-label-output(stmt'stmt-label) {
+   if .switch-stack-c == 0 {
+      'c1.stdout{stmt.base.info ": Label #" stmt.base.type " is not inside a switch statement\n"}
+      'c.exit(#failure)
+   }
+   switch-stmt' = .switch-stack-v[.switch-stack-c - 1]
+   stmt.bytecode-pos = .cm1-bytecode-wtr.pos
+   if switch-stmt.first-label == null {
+      switch-stmt.first-label = stmt
+   } else {
+      switch-stmt.last-label.next-label = stmt
+   }
+   switch-stmt.last-label = stmt
+   if stmt.base.type == #default {
+      if switch-stmt.default-label != null {
+         'c1.stdout{stmt.base.info ": A switch statement cannot have more than one default label\n"}
+         'c.exit(#failure)
+      }
+      switch-stmt.default-label = stmt
+   }
+}
+stmt-switch-output(stmt'stmt-switch) {
+   type' = stmt.expr.output(stars-c?, stars-bc?)
+   if (||, stars-c != #0, !type.is-integer()) {
+      'c1.stdout{stmt.base.info ": Switch expression must have an integer type\n"}
+      'c.exit(#failure)
+   }
+   type = type.integer-promote()
+   bc-int-convert(type)
+   dispatch-jump-ptr' = bc-jump-begin(#jump)
+   stmt.first-label = null
+   stmt.last-label = null
+   stmt.default-label = null
+   .switch-stack-v[.switch-stack-c++] = stmt
+   control-output-push(#switch)
+   stmt.space.output()
+   .switch-stack-c--
+   body-end-jump-ptr' = bc-jump-begin(#jump)
+   bc-jump-end(dispatch-jump-ptr)
+   label' = stmt.first-label
+   loop label != null {
+      if label.base.type == #case {
+         case-type' = label.expr.output(case-stars-c?, case-stars-bc?)
+         if (||, case-stars-c != #0, !case-type.is-integer()) {
+            'c1.stdout{label.base.info ": Case expression must have an integer type\n"}
+            'c.exit(#failure)
+         }
+         bc-int-convert(type)
+         bc-op(#dup-pair)
+         bc-int-binary(#eq, type)
+         next-case-jump-ptr' = bc-jump-begin(#jump-if-zero)
+         bc-op(#pop)
+         bc-op(#pop)
+         bc-jump-to(#jump, label.bytecode-pos)
+         bc-jump-end(next-case-jump-ptr)
+         bc-op(#pop)
+      }
+      label = label.next-label
+   }
+   bc-op(#pop)
+   if stmt.default-label != null {
+      bc-jump-to(#jump, stmt.default-label.bytecode-pos)
+   }
+   end-pos' = .cm1-bytecode-wtr.pos
+   bc-jump-set(body-end-jump-ptr, end-pos)
+   control-output-pop(end-pos, 0, false)
+}
+#space-limit = 1024
+space-v'space.[#space-limit]
+space-c'u16
+#space-stack-limit = 128
+space-stack-v'space[#space-stack-limit]
+space-stack-c'u8
+space-begin()'space {
+   space' = .space-v[.space-c++]
+   if .space-c == 1 { // If this is the first space, create a local variable for each function argument
+      func-arg-start' = .func-arg-start
+      space.lvar-c = .func-arg-c
+      loop i' = 0; .func-arg-c; i++ {
+         farg' = .func-decl-arg-v[func-arg-start + i]
+         n' = .lvar-name-c++
+         .lvar-name-id-v[n] = farg.name
+         .lvar-name-idx-v[n] = .lvar-c
+         .lvar-name-space-v[n] = 0
+         lvar' = .lvar-v[.lvar-c++]
+         lvar.info.copy-from(farg.info)
+         lvar.type-src = farg.type-src
+         lvar.type-final = farg.type-final
+         lvar.stars-src = farg.stars-src
+         lvar.stars-final = farg.stars-final
+      }
+   }
+   .space-stack-v[.space-stack-c++] = space
+   return space
+}
+#lvar-limit = 1024 * 256
+struct 'lvar[info'line-info., type-src'type, type-final'type, stars-src'stars, stars-final'stars, array-dim-start'u32, array-dim-c'u32, array-size'u32]
+lvar-v'lvar.[#lvar-limit]
+lvar-c'u16
+lvar-name-id-v'id[#lvar-limit]
+lvar-name-idx-v'u16[#lvar-limit]
+lvar-name-space-v'u16[#lvar-limit]
+lvar-name-c'u16
+space-lvar(type'type, stars'stars, name'id, array-dims'u32[], array-dim-c'u32, src'expr, li'line-info) {
+   space-idx' = .space-stack-c - 1
+   space' = .space-stack-v[space-idx]
+   space.lvar-c++
+   i' = .lvar-name-c
+   loop i > 0 {
+      i--
+      if .lvar-name-id-v[i] == name {
+         if .lvar-name-space-v[i] == space-idx {
+            'c1.stdout{li ": Variable '" name "' was already declared at " .lvar-v[.lvar-name-idx-v[i]].info "\n"}
+            'c.exit(#failure)
+         }
+         break
+      }
+   }
+   n' = .lvar-name-c++
+   .lvar-name-id-v[n] = name
+   .lvar-name-idx-v[n] = .lvar-c
+   .lvar-name-space-v[n] = space-idx
+   lvar' = .lvar-v[.lvar-c++]
+   lvar.info.copy-from(li)
+   lvar.type-src = type
+   lvar.stars-src = stars
+   lvar.type-final = type.final-type(stars, lvar.stars-final)
+   lvar.array-dim-c = array-dim-c
+   if (&&, lvar.type-final.is-aggregate(), lvar.stars-final == #0, lvar.type-final.field-v == null) {
+      'c1.stdout{li ": Struct or union '" type.name "' was used but it was never defined.\n"}
+      'c.exit(#failure)
+   }
+   if array-dim-c != 0 {
+      array-decl(lvar.type-final, lvar.stars-final, array-dims, array-dim-c, li, lvar.array-dim-start, lvar.array-size)
+   }
+   if src == expr-from-num(1) {
+      stmt-expr(expr-assign(expr-var(name, li), #set, null))
+   } elif src != null {
+      stmt-expr(expr-assign(expr-var(name, li), #set, src))
+   }
+}
+space-end() {
+   .space-stack-c--
+   space' = .space-stack-v[.space-stack-c]
+   .lvar-name-c -= space.lvar-c
+}
+space-add(s'stmt) {
+   space' = .space-stack-v[.space-stack-c - 1]
+   if space.first == null {
+      space.first = s
+      space.last = s
+   } else {
+      space.last.next = s
+      space.last = s
+   }
+}
+}

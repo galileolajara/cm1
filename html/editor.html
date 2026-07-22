@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+   <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Cm1 Playground</title>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/codemirror.min.css">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/theme/material-darker.min.css">
+      <style>
+         :root {
+            color-scheme: dark;
+            --bg: #070a0f;
+            --panel: rgba(15, 21, 31, 0.92);
+            --panel-strong: #111824;
+            --panel-soft: #0c111a;
+            --border: #263244;
+            --border-soft: #1b2534;
+            --text: #e7edf5;
+            --muted: #8e9bae;
+            --accent: #47e6a5;
+            --accent-strong: #23c985;
+            --accent-soft: rgba(71, 230, 165, 0.12);
+            --blue: #70a5ff;
+            --danger: #ff6b7a;
+            --radius: 16px;
+            --shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+         }
+
+         * {
+            box-sizing: border-box;
+         }
+
+         html {
+            min-height: 100%;
+            background: var(--bg);
+         }
+
+         body {
+            min-height: 100vh;
+            margin: 0;
+            color: var(--text);
+            background:
+               radial-gradient(circle at 12% -10%, rgba(41, 121, 255, 0.14), transparent 34rem),
+               radial-gradient(circle at 88% 2%, rgba(71, 230, 165, 0.1), transparent 30rem),
+               var(--bg);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         }
+
+         button {
+            font: inherit;
+         }
+
+         .app-shell {
+            width: min(1400px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 34px 0 48px;
+         }
+
+         .hero {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 24px;
+         }
+
+         .eyebrow {
+            margin: 0 0 8px;
+            color: var(--accent);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+         }
+
+         h1 {
+            margin: 0;
+            font-size: clamp(32px, 5vw, 52px);
+            line-height: 1;
+            letter-spacing: -0.045em;
+         }
+
+         .subtitle {
+            max-width: 660px;
+            margin: 12px 0 0;
+            color: var(--muted);
+            font-size: 15px;
+            line-height: 1.6;
+         }
+
+         .status-pill {
+            display: inline-flex;
+            flex: 0 0 auto;
+            align-items: center;
+            gap: 9px;
+            min-height: 36px;
+            padding: 0 13px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            color: var(--muted);
+            background: rgba(8, 12, 18, 0.72);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 12px;
+         }
+
+         .status-pill::before {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f4c66a;
+            box-shadow: 0 0 12px rgba(244, 198, 106, 0.65);
+            content: "";
+         }
+
+         .status-pill.ready {
+            color: #b9f7dc;
+            border-color: rgba(71, 230, 165, 0.28);
+            background: var(--accent-soft);
+         }
+
+         .status-pill.ready::before {
+            background: var(--accent);
+            box-shadow: 0 0 12px rgba(71, 230, 165, 0.68);
+         }
+
+         .status-pill.error {
+            color: #ffc0c7;
+            border-color: rgba(255, 107, 122, 0.35);
+            background: rgba(255, 107, 122, 0.1);
+         }
+
+         .status-pill.error::before {
+            background: var(--danger);
+            box-shadow: 0 0 12px rgba(255, 107, 122, 0.65);
+         }
+
+         .panel {
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--panel);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+         }
+
+         .panel-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            min-height: 58px;
+            padding: 10px 12px 10px 18px;
+            border-bottom: 1px solid var(--border-soft);
+            background: rgba(17, 24, 36, 0.82);
+         }
+
+         .file-label,
+         .panel-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: max-content;
+            color: #c7d1df;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 12px;
+            font-weight: 650;
+         }
+
+         .file-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 3px;
+            background: var(--blue);
+            box-shadow: 0 0 12px rgba(112, 165, 255, 0.55);
+         }
+
+         .sample-actions {
+            display: flex;
+            gap: 7px;
+            overflow-x: auto;
+            padding: 2px;
+            scrollbar-width: thin;
+         }
+
+         .sample-button,
+         .quiet-button {
+            min-height: 34px;
+            padding: 0 11px;
+            border: 1px solid var(--border);
+            border-radius: 9px;
+            color: var(--muted);
+            background: #111925;
+            font-size: 12px;
+            font-weight: 650;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: border-color 150ms ease, color 150ms ease, background 150ms ease, transform 150ms ease;
+         }
+
+         .sample-button:hover,
+         .sample-button.active,
+         .quiet-button:hover {
+            color: var(--text);
+            border-color: #40516a;
+            background: #182334;
+         }
+
+         .sample-button:active,
+         .quiet-button:active,
+         .run-button:active {
+            transform: translateY(1px);
+         }
+
+         #code {
+            background: #10151d;
+         }
+
+         .cm-s-material-darker.CodeMirror {
+            height: clamp(430px, 60vh, 720px);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 14px;
+            line-height: 1.55;
+            background: #10151d;
+         }
+
+         .cm-s-material-darker .CodeMirror-gutters {
+            border-right: 1px solid #1f2a39;
+            background: #0d1219;
+         }
+
+         .CodeMirror-linenumber {
+            color: #46556b;
+         }
+
+         .CodeMirror-cursor {
+            border-left-color: var(--accent);
+         }
+
+         .editor-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            min-height: 66px;
+            padding: 12px 14px 12px 18px;
+            border-top: 1px solid var(--border-soft);
+            background: var(--panel-strong);
+         }
+
+         .shortcut-hint {
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+         }
+
+         kbd {
+            padding: 3px 6px;
+            border: 1px solid #344157;
+            border-bottom-color: #45556f;
+            border-radius: 6px;
+            color: #cbd5e1;
+            background: #17202d;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 11px;
+            box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+         }
+
+         .run-button {
+            min-height: 42px;
+            padding: 0 20px;
+            border: 1px solid #5ef0b3;
+            border-radius: 11px;
+            color: #04130d;
+            background: linear-gradient(135deg, #65efb8, #32d895);
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(35, 201, 133, 0.2);
+            transition: filter 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+         }
+
+         .run-button:hover {
+            filter: brightness(1.06);
+            box-shadow: 0 12px 36px rgba(35, 201, 133, 0.28);
+         }
+
+         .output-panel {
+            margin-top: 18px;
+         }
+
+         .output-panel .panel-bar {
+            min-height: 50px;
+         }
+
+         .output-badge {
+            padding: 3px 7px;
+            border: 1px solid rgba(71, 230, 165, 0.23);
+            border-radius: 6px;
+            color: var(--accent);
+            background: rgba(71, 230, 165, 0.08);
+            font-size: 10px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+         }
+
+         #output {
+            min-height: 150px;
+            max-height: 360px;
+            margin: 0;
+            overflow: auto;
+            padding: 20px;
+            color: #bdd0c7;
+            background: var(--panel-soft);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.65;
+            white-space: pre-wrap;
+         }
+
+         #output:empty::before {
+            color: #526074;
+            content: "Program output will appear here.";
+         }
+
+         button:focus-visible,
+         .CodeMirror-focused {
+            outline: none;
+         }
+
+         button:focus-visible {
+            box-shadow: 0 0 0 3px rgba(112, 165, 255, 0.28);
+         }
+
+         @media (max-width: 800px) {
+            .app-shell {
+               width: min(100% - 20px, 1400px);
+               padding-top: 22px;
+            }
+
+            .hero {
+               align-items: flex-start;
+               flex-direction: column;
+               gap: 16px;
+            }
+
+            .panel-bar {
+               align-items: flex-start;
+               flex-direction: column;
+               padding: 13px;
+            }
+
+            .sample-actions {
+               width: 100%;
+            }
+
+            .cm-s-material-darker.CodeMirror {
+               height: 56vh;
+               min-height: 380px;
+            }
+
+            .editor-footer {
+               align-items: stretch;
+               flex-direction: column;
+            }
+
+            .run-button {
+               width: 100%;
+            }
+         }
+      </style>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/codemirror.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/mode/clike/clike.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/addon/edit/matchbrackets.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.20/addon/edit/closebrackets.min.js"></script>
+   </head>
+   <body>
+      <main class="app-shell">
+         <header class="hero">
+            <div>
+               <p class="eyebrow">A subset of C programming language</p>
+               <h1>Cm1 Playground</h1>
+               <p class="subtitle">Write, compile, and benchmark Cm1 directly in your browser.</p>
+            </div>
+            <div id="status" class="status-pill" role="status">Loading runtime</div>
+         </header>
+
+         <section class="panel editor-panel" aria-label="Cm1 code editor">
+            <div class="panel-bar">
+               <div class="file-label"><span class="file-dot"></span>playground.cm1.c</div>
+               <div class="sample-actions" aria-label="Benchmark samples">
+                  <button class="sample-button" type="button" data-sample="0" title="Integer mixer benchmark">Load Sample Code #1</button>
+                  <button class="sample-button" type="button" data-sample="1" title="Prime counting benchmark">Load Sample Code #2</button>
+                  <button class="sample-button" type="button" data-sample="2" title="Matrix multiplication benchmark">Load Sample Code #3</button>
+                  <button class="sample-button" type="button" data-sample="3" title="Mandelbrot benchmark">Load Sample Code #4</button>
+                  <button class="sample-button" type="button" data-sample="4" title="Insertion sort benchmark">Load Sample Code #5</button>
+               </div>
+            </div>
+            <div id="code" aria-label="Cm1 source code"></div>
+            <div class="editor-footer">
+               <p class="shortcut-hint">Compile and execute with <kbd>Ctrl</kbd> + <kbd>Enter</kbd> or <kbd>⌘</kbd> + <kbd>Enter</kbd></p>
+               <button id="run" class="run-button" type="button">Run code</button>
+            </div>
+         </section>
+
+         <section class="panel output-panel" aria-label="Program output">
+            <div class="panel-bar">
+               <div class="panel-title">Program output <span class="output-badge">stdout</span></div>
+               <button id="clear-output" class="quiet-button" type="button">Clear output</button>
+            </div>
+            <pre id="output" aria-live="polite"></pre>
+         </section>
+      </main>
+
+      <script>
+         "use strict";
+
+         const statusElement = document.getElementById("status");
+         const outputElement = document.getElementById("output");
+
+         var Module = {
+            print(...parts) {
+               outputElement.append(`${parts.join(" ")}\n`);
+            },
+
+            onRuntimeInitialized() {
+               if (typeof CodeMirror === "undefined") {
+                  statusElement.textContent = "CodeMirror failed to load";
+                  statusElement.classList.add("error");
+                  return;
+               }
+               let heap = Module.HEAPU8.buffer;
+               let io_mem = Module._io_mem();
+               let io_limit = Module._io_limit();
+               let io_arr = new Uint8Array(heap, io_mem, io_limit);
+               let te = new TextEncoder();
+
+               function run_code(code) {
+                  outputElement.textContent = "";
+                  let input_str = te.encode(code);
+                  io_arr.set(input_str);
+                  let compile_start = performance.now();
+                  let compile_time;
+                  try {
+                     Module._compile(input_str.length);
+                     compile_time = performance.now() - compile_start;
+                  } catch(e) {
+                     Module.print("Compile error");
+                     return;
+                  }
+                  Module.print(`Compilation time: ${compile_time.toFixed(2)} ms`);
+
+                  let execute_start = performance.now();
+                  try {
+                     Module._execute();
+                  } catch(e) {
+                     Module.print("Runtime error");
+                     return;
+                  }
+                  let execute_time = performance.now() - execute_start;
+                  Module.print(`Execution time: ${execute_time.toFixed(2)} ms`);
+                  Module.print(`Total time: ${(compile_time + execute_time).toFixed(2)} ms`);
+               }
+               function run_and_scroll() {
+                  run_code(editor.getValue());
+                  window.scrollTo({top: document.documentElement.scrollHeight, behavior: "smooth"});
+               }
+
+               const sample_codes = [
+String.raw`// Sample #1: one million rounds of integer mixing.
+void run() {
+   uint32_t state;
+   uint32_t checksum;
+   int i;
+
+   state = 0x12345678;
+   checksum = 0;
+   for (i = 0; i < 1000000; i++) {
+      state = state * 1664525 + 1013904223;
+      state = state ^ (state >> 16);
+      checksum = checksum + (state & 0xffff);
+   }
+
+   printf("Integer mixer: 1000000 rounds\n");
+   printf("Final state: 0x%x, checksum: 0x%x\n", state, checksum);
+}
+`,
+String.raw`// Sample #2: count primes using trial division.
+void run() {
+   int limit;
+   int count;
+   int checksum;
+   int n;
+   int divisor;
+   int prime;
+
+   limit = 12000;
+   count = 0;
+   checksum = 0;
+
+   for (n = 2; n <= limit; n++) {
+      prime = 1;
+      divisor = 2;
+      while (divisor * divisor <= n) {
+         if (n % divisor == 0) {
+            prime = 0;
+            break;
+         }
+         divisor++;
+      }
+      if (prime) {
+         count++;
+         checksum = (checksum + n) % 1000000;
+      }
+   }
+
+   printf("Primes up to %d: %d\n", limit, count);
+   printf("Prime checksum: %d\n", checksum);
+}
+`,
+String.raw`// Sample #3: repeated 48 x 48 integer matrix multiplication.
+void run() {
+   int a[6 * 8][6 * 8];
+   int b[6 * 8][6 * 8];
+   int c[6 * 8][6 * 8];
+   int i;
+   int j;
+   int k;
+   int repeat;
+   int sum;
+   int checksum;
+
+   for (i = 0; i < 48; i++) {
+      for (j = 0; j < 48; j++) {
+         a[i][j] = (i * 3 + j) & 15;
+         b[i][j] = (i + j * 5) & 15;
+      }
+   }
+
+   for (repeat = 0; repeat < 8; repeat++) {
+      for (i = 0; i < 48; i++) {
+         for (j = 0; j < 48; j++) {
+            sum = 0;
+            for (k = 0; k < 48; k++) {
+               sum = sum + a[i][k] * b[k][j];
+            }
+            c[i][j] = sum;
+         }
+      }
+   }
+
+   checksum = 0;
+   for (i = 0; i < 48; i++) {
+      for (j = 0; j < 48; j++) {
+         checksum = (checksum + c[i][j]) & 0x7fffffff;
+      }
+   }
+
+   printf("Matrix multiply: 48 x 48, repeated 8 times\n");
+   printf("Matrix checksum: %d\n", checksum);
+}
+`,
+String.raw`// Sample #4: Mandelbrot-style floating-point workload.
+void run() {
+   int width;
+   int height;
+   int max_iter;
+   int px;
+   int py;
+   int iter;
+   int score;
+   double x0;
+   double y0;
+   double x;
+   double y;
+   double xx;
+   double yy;
+
+   width = 140;
+   height = 90;
+   max_iter = 80;
+   score = 0;
+
+   for (py = 0; py < height; py++) {
+      y0 = py * 2.0 / height - 1.0;
+      for (px = 0; px < width; px++) {
+         x0 = px * 3.5 / width - 2.5;
+         x = 0.0;
+         y = 0.0;
+         iter = 0;
+
+         while (x * x + y * y <= 4.0 && iter < max_iter) {
+            xx = x * x;
+            yy = y * y;
+            y = 2.0 * x * y + y0;
+            x = xx - yy + x0;
+            iter++;
+         }
+         score = score + iter;
+      }
+   }
+
+   printf("Mandelbrot grid: %d x %d\n", width, height);
+   printf("Iteration score: %d\n", score);
+}
+`,
+String.raw`// Sample #5: insertion sort with a struct-based operation counter.
+typedef struct {
+   int comparisons;
+   int moves;
+} SortStats;
+
+void run() {
+   int values[(1 << 9) + 256];
+   SortStats stats;
+   uint32_t checksum;
+   int count;
+   int i;
+   int j;
+   int key;
+   int sorted;
+
+   count = 768;
+   stats.comparisons = 0;
+   stats.moves = 0;
+
+   for (i = 0; i < count; i++) {
+      values[i] = ((count - i) * 37) & 0xffff;
+   }
+
+   for (i = 1; i < count; i++) {
+      key = values[i];
+      j = i;
+      while (j > 0 && values[j - 1] > key) {
+         stats.comparisons++;
+         values[j] = values[j - 1];
+         stats.moves++;
+         j--;
+      }
+      if (j > 0) {
+         stats.comparisons++;
+      }
+      values[j] = key;
+      stats.moves++;
+   }
+
+   sorted = 1;
+   checksum = 0;
+   for (i = 0; i < count; i++) {
+      if (i > 0 && values[i - 1] > values[i]) {
+         sorted = 0;
+      }
+      checksum = (checksum * 31 + values[i]) & 0x7fffffff;
+   }
+
+   printf("Insertion sort: %d values, sorted=%d\n", count, sorted);
+   printf("Comparisons: %d, moves: %d, checksum: 0x%x\n",
+      stats.comparisons, stats.moves, checksum);
+}
+`
+               ];
+
+               let editor = CodeMirror(document.getElementById("code"), {
+                  value: localStorage.code || sample_codes[0],
+                  mode: "text/x-csrc",
+                  theme: "material-darker",
+                  lineNumbers: true,
+                  indentUnit: 3,
+                  tabSize: 3,
+                  indentWithTabs: false,
+                  matchBrackets: true,
+                  autoCloseBrackets: true,
+                  extraKeys: {
+                     "Ctrl-Enter": function() {
+                        run_and_scroll();
+                     },
+                     "Cmd-Enter": function() {
+                        run_and_scroll();
+                     }
+                  }
+               });
+               editor.on("blur", function() {
+                  localStorage.code = editor.getValue();
+               });
+               document.getElementById("run").onclick = function() {
+                  run_and_scroll();
+               };
+               document.getElementById("clear-output").onclick = function() {
+                  outputElement.textContent = "";
+               };
+               for (const button of document.querySelectorAll("[data-sample]")) {
+                  button.onclick = function() {
+                     let sample_number = Number(button.dataset.sample) + 1;
+                     if (confirm(`Replace the current code with sample #${sample_number}?`)) {
+                        editor.setValue(sample_codes[sample_number - 1]);
+                        localStorage.code = editor.getValue();
+                        editor.focus();
+                        for (const sample_button of document.querySelectorAll("[data-sample]")) {
+                           sample_button.classList.remove("active");
+                        }
+                        button.classList.add("active");
+                     }
+                  };
+               }
+               statusElement.textContent = "Runtime ready";
+               statusElement.classList.add("ready");
+            },
+
+            onAbort(reason) {
+               statusElement.textContent = "WebAssembly failed";
+               statusElement.classList.remove("ready");
+               statusElement.classList.add("error");
+               outputElement.textContent = String(reason);
+            }
+         };
+      </script>
+      <script src="editor.js"></script>
+   </body>
+</html>

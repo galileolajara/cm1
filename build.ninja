@@ -1,0 +1,61 @@
+rule ld-lemon
+ command = tcc -I. $in -o $out
+
+rule lemon
+ restat = true
+ command = out/lemon -dout $in
+
+rule cp1
+ command = cp1-compile -I out -c $out $in
+
+rule c
+ command = clang -ggdb -I. -Iout -o $out -c $in
+
+rule ld
+ command = clang -ggdb -o $out $in && strip $out
+
+rule re2c
+ command = re2c --input-encoding utf8 --utf8 $in -o $out
+
+rule run
+ command = $in $out
+
+rule runrestat
+ restat = true
+ command = $in $out
+
+rule file-to-h
+ command = xxd -i $in $out
+
+# rule e
+#  deps = gcc
+#  depfile = $out.d
+#  command = clang -MMD -MF $out.d -E $in > $out
+
+rule emcc
+ command = emcc $in $flags -o $out -I. -Iout -Wno-incompatible-pointer-types
+
+build out/cm1.cp1.c: cp1 cm1-standalone.cp1 cm1.cp1 expr.cp1 print-error.cp1 space.cp1 func.cp1 | out/tokens.cp1
+build out/cm1.cp1.c.o: c out/cm1.cp1.c | out/cm1.c.h out/cm1.h.h cm1_preprocess.c
+build out/parse.c.o: c parse.c | out/export.h out/cm1_parse.c out/lex.c
+build out/export.cp1.c: cp1 export.cp1
+build out/export: ld out/export.cp1.c
+build out/export.h: run out/export out/cm1.cp1.c
+build out/lex.c: re2c lex-re2c.c
+build out/cm1: ld out/cm1.cp1.c.o out/parse.c.o
+build out/token.cp1.c: cp1 token.cp1
+build out/token: ld out/token.cp1.c
+build out/tokens.cp1: run out/token out/cm1_parse.h
+build out/lemon: ld-lemon lemon.c
+build out/cm1_parse.c out/cm1_parse.h: lemon cm1_parse.y | out/lemon
+build out/cm1.c.h: file-to-h cm1.c
+build out/cm1.h.h: file-to-h cm1.h
+
+# build out/test.cm1.c: e test.cm1.c
+build out/test.c out/test.cm1: runrestat out/cm1 test.cm1.c test.cm1.cfg
+build out/test: ld out/test.c | cm1.c
+
+build out/stdio.h.h: file-to-h include/stdio.h
+build out/web-cm1.cp1.c: cp1 cm1-web.cp1 cm1.cp1 expr.cp1 print-error.cp1 space.cp1 func.cp1 | out/tokens.cp1
+build html/editor.js: emcc web_editor.c parse.c | out/web-cm1.cp1.c web_cm1.c out/stdio.h.h
+ flags = -O3 --no-entry -sEXPORTED_FUNCTIONS=_compile,_execute,_io_mem,_io_limit -s ALLOW_MEMORY_GROWTH=0 -sEXPORTED_RUNTIME_METHODS=cwrap,HEAPU8 -sENVIRONMENT=web

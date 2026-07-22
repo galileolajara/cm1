@@ -1,0 +1,1458 @@
+'c1 = 'libcp1
+'c = 'libc
+using 'cm1 {
+#expr-call-stack-depth-limit = 32
+#expr-call-arg-limit = 32
+expr-call-stack-v'expr[#expr-call-stack-depth-limit][#expr-call-arg-limit]
+expr-call-stack-c'u8[#expr-call-stack-depth-limit]
+expr-call-stack-depth'u8
+expr-call-begin() {
+   depth' = .expr-call-stack-depth++
+   .expr-call-stack-c[depth] = 0
+}
+expr-call-arg(expr'expr) {
+   depth' = .expr-call-stack-depth - 1
+   .expr-call-stack-v[depth][.expr-call-stack-c[depth]++] = expr
+}
+expr-i32(i32'i32, li'line-info)'expr {
+   expr'expr-i32 = expr-alloc('expr-i32['usz], #i32, li)
+   expr.i32 = i32
+   return expr
+}
+expr-alloc(size'usz, type'expr-type, li'line-info)'ref {
+   r'rdr. = ?
+   r.ref = .cm1-data-mem
+   r.pos += .cm1-data-pos
+   .cm1-data-pos += (size + 7) & (0xffffffff ^ 7) // Align to 8 bytes
+   expr'expr = r.ref
+   expr.info.copy-from(li)
+   expr.type = type
+   return r.ref
+}
+enum 'expr-type[#none, #call, #i32, #assign, #math, #unary, #var, #field, #index, #inc-dec, #size-align, #cast, #logical, #f32, #f64, #conditional, #string]'u8 {
+   cp1-name(e'this)'char @const[] @cp1-name
+}
+expr-call-fixed(func-name'id, arg-v'expr[], arg-c'u8, li'line-info)'expr {
+   expr'expr-call = expr-alloc(('expr-call['usz] - 'usz['usz]) + ('usz['usz] * arg-c), #call, li)
+   loop i' = 0; .func-c; i++ {
+      if .func-name-v[i] == func-name {
+         func' = .func-v[i]
+         expr.func = func
+         expr.arg-c = arg-c
+         if func.arg-c != arg-c {
+            'c1.stdout{li ": Function argument count must be " func.arg-c " in order to call the function at " func.info "\n"}
+            'c.exit(#failure)
+         }
+         loop j' = 0; arg-c; j++ {
+            expr.arg-v[j] = arg-v[j]
+         }
+         return expr
+      }
+   }
+   'c1.stdout{li ": Function '" func-name "' not found\n"}
+   'c.exit(#failure)
+   return null
+}
+expr-call(func-name'id, li'line-info)'expr {
+   depth' = .expr-call-stack-depth -= 1
+   arg-c' = .expr-call-stack-c[depth]
+   if func-name == .id-printf {
+      return expr-printf(.expr-call-stack-v[depth], arg-c, li)
+   }
+   return expr-call-fixed(func-name, .expr-call-stack-v[depth], arg-c, li)
+}
+struct 'expr-call[base'expr., func'func, arg-c'u8, arg-v'expr[1]]
+struct 'expr-i32[base'expr., i32'i32]
+// String expressions live outside cm1-data-mem so their bytecode operands can
+// be patched after the final string-pool position is known.
+#string-limit = 1024 * 1024
+struct 'expr-string[
+   base'expr.,
+   raw'char @const[],
+   raw-len'u32,
+   str-offset'u32,
+   str-len'u32,
+   bytecode-offset'u32[]
+]
+expr-str-v'expr-string.[#string-limit]
+expr-str-c'u32
+expr-discard-bytecode-depth'u32
+expr-string-alloc(li'line-info)'expr-string {
+   if .expr-str-c == #string-limit {
+      'c1.stdout{li ": Too many string literal expressions\n"}
+      'c.exit(#failure)
+   }
+   expr'expr-string = .expr-str-v[.expr-str-c++]
+   expr.base.info.copy-from(li)
+   expr.base.type = #string
+   expr.bytecode-offset = null
+   return expr
+}
+expr-string(raw'char @const[], raw-len'u32, li'line-info)'expr {
+   expr'expr-string = expr-string-alloc(li)
+   expr.raw = raw
+   expr.raw-len = raw-len
+   expr.str-offset = cm1-string-intern(raw, raw-len, li, expr.str-len)
+   return expr
+}
+expr-string-decoded(decoded'char @const[], len'u32, li'line-info)'expr {
+   expr'expr-string = expr-string-alloc(li)
+   expr.raw = null
+   expr.raw-len = 0
+   expr.str-offset = cm1-string-intern-decoded(decoded, len, li, expr.str-len)
+   return expr
+}
+expr-string-printf-text(decoded'char @const[], len'u32, li'line-info)'expr {
+   expr'expr-string = expr-string-alloc(li)
+   expr.raw = null
+   expr.raw-len = 0
+   expr.str-offset = cm1-string-intern-printf-text(decoded, len, li, expr.str-len)
+   return expr
+}
+expr-printf-helper-id(conversion'char, li'line-info)'id {
+   if (||, conversion == ''d, conversion == ''i) {
+      return id-get("cm1_printf_d", 12)
+   }
+   if conversion == ''u { return id-get("cm1_printf_u", 12) }
+   if conversion == ''o { return id-get("cm1_printf_o", 12) }
+   if (||, conversion == ''x, conversion == ''X) {
+      return id-get("cm1_printf_x", 12)
+   }
+   if (||, conversion == ''f, conversion == ''F,
+      conversion == ''e, conversion == ''E,
+      conversion == ''g, conversion == ''G,
+      conversion == ''a, conversion == ''A) {
+      return id-get("cm1_printf_f", 12)
+   }
+   if conversion == ''c { return id-get("cm1_printf_c", 12) }
+   if conversion == ''s { return id-get("cm1_printf_s", 12) }
+   if conversion == ''p { return id-get("cm1_printf_p", 12) }
+   'c1.stdout{li ": Unsupported printf conversion '%" conversion "'\n"}
+   'c.exit(#failure)
+   return #nil
+}
+expr-printf(arg-v'expr[], arg-c'u8, li'line-info)'expr {
+   if arg-c == 0 {
+      'c1.stdout{li ": printf requires a format string\n"}
+      'c.exit(#failure)
+   }
+   format-base' = arg-v[0]
+   if format-base.type != #string {
+      'c1.stdout{format-base ": printf format must be a string literal\n"}
+      'c.exit(#failure)
+   }
+   format'expr-string = format-base
+   format-str'char @const[] = &.cm1-bytecode.str[format.str-offset]
+   format-len' = format.str-len
+   loop i' = 0; format-len; i++ {
+      if format-str[i] == ''\0 {
+         'c1.stdout{format-base ": Embedded null bytes are not supported in printf formats\n"}
+         'c.exit(#failure)
+      }
+   }
+
+   current' = expr-call-fixed(id-get("cm1_printf_begin", 16), null, 0, li)
+   helper-arg-v'expr[3]
+   arg-i' = 1
+   segment-begin' = 0
+   pos' = 0
+   loop pos < format-len {
+      if format-str[pos] != ''% {
+         pos++
+         continue
+      }
+      pos++
+      if (&&, pos < format-len, format-str[pos] == ''%) {
+         pos++
+         continue
+      }
+
+      loop pos < format-len {
+         c'char = format-str[pos]
+         if (||, c == ''-, c == ''+, c == '' , c == ''#, c == ''0, c == 39) {
+            pos++
+         } else { break }
+      }
+      if (&&, pos < format-len, format-str[pos] == ''*) {
+         'c1.stdout{format-base ": printf '*' width arguments are not supported\n"}
+         'c.exit(#failure)
+      }
+      loop (&&, pos < format-len, format-str[pos] >= ''0, format-str[pos] <= ''9) { pos++ }
+      if (&&, pos < format-len, format-str[pos] == ''.) {
+         pos++
+         if (&&, pos < format-len, format-str[pos] == ''*) {
+            'c1.stdout{format-base ": printf '*' precision arguments are not supported\n"}
+            'c.exit(#failure)
+         }
+         loop (&&, pos < format-len, format-str[pos] >= ''0, format-str[pos] <= ''9) { pos++ }
+      }
+      if (&&, pos < format-len, (||, format-str[pos] == ''h, format-str[pos] == ''l)) {
+         length-char'char = format-str[pos++]
+         if (&&, pos < format-len, format-str[pos] == length-char) { pos++ }
+      } elif (&&, pos < format-len,
+         (||, format-str[pos] == ''j, format-str[pos] == ''z,
+            format-str[pos] == ''t, format-str[pos] == ''L)) {
+         pos++
+      }
+      if pos == format-len {
+         'c1.stdout{format-base ": Incomplete printf conversion\n"}
+         'c.exit(#failure)
+      }
+      conversion'char = format-str[pos++]
+      helper-id' = expr-printf-helper-id(conversion, format-base.info)
+      if arg-i == arg-c {
+         'c1.stdout{format-base ": Not enough printf arguments for the format string\n"}
+         'c.exit(#failure)
+      }
+      helper-arg-v[0] = current
+      helper-arg-v[1] = expr-string-decoded(
+         &format-str[segment-begin], pos - segment-begin, format-base.info)
+      helper-arg-v[2] = arg-v[arg-i++]
+      current = expr-call-fixed(helper-id, helper-arg-v, 3, li)
+      segment-begin = pos
+   }
+   if arg-i != arg-c {
+      'c1.stdout{format-base ": Too many printf arguments for the format string\n"}
+      'c.exit(#failure)
+   }
+   helper-arg-v[0] = current
+   helper-arg-v[1] = expr-string-printf-text(
+      &format-str[segment-begin], format-len - segment-begin, format-base.info)
+   return expr-call-fixed(id-get("cm1_printf_end", 14), helper-arg-v, 2, li)
+}
+struct 'expr-f32[base'expr., value'f32]
+expr-f32(value'f32, li'line-info)'expr {
+   expr'expr-f32 = expr-alloc('expr-f32['usz], #f32, li)
+   expr.value = value
+   return expr
+}
+struct 'expr-f64[base'expr., value'f64]
+expr-f64(value'f64, li'line-info)'expr {
+   expr'expr-f64 = expr-alloc('expr-f64['usz], #f64, li)
+   expr.value = value
+   return expr
+}
+expr-from-num(num'u32)'expr @decl('<# num>)
+struct 'expr-field[base'expr., obj'expr, field-name'id, array-dim-start'u32, array-dim-c'u32, array-size'u32, arrow'bool]
+expr-field(obj'expr, arrow'bool, field-name'id)'expr {
+   expr'expr-field = expr-alloc('expr-field['usz], #field, obj.info)
+   expr.obj = obj
+   expr.field-name = field-name
+   expr.arrow = arrow
+   return expr
+}
+struct 'expr-index[base'expr., obj'expr, index'expr, array-dim-start'u32, array-dim-c'u32, array-size'u32]
+expr-index(obj'expr, index'expr)'expr {
+   expr'expr-index = expr-alloc('expr-index['usz], #index, obj.info)
+   expr.obj = obj
+   expr.index = index
+   return expr
+}
+enum 'unary-op[#amp, #star, #plus, #minus, #tilde, #bang]'u8
+struct 'expr-unary[base'expr., expr'expr, op'unary-op]
+expr-unary(e'expr, op'unary-op)'expr {
+   expr'expr-unary = expr-alloc('expr-unary['usz], #unary, e.info)
+   expr.expr = e
+   expr.op = op
+   return expr
+}
+struct 'expr-inc-dec[base'expr., expr'expr, increment'bool, prefix'bool]
+expr-inc-dec(e'expr, increment'bool, prefix'bool)'expr {
+   expr'expr-inc-dec = expr-alloc('expr-inc-dec['usz], #inc-dec, e.info)
+   expr.expr = e
+   expr.increment = increment
+   expr.prefix = prefix
+   return expr
+}
+struct 'expr-size-align[base'expr., operand'expr, type-src'type, stars-src'stars, align'bool]
+expr-sizeof-expr(e'expr)'expr {
+   expr'expr-size-align = expr-alloc('expr-size-align['usz], #size-align, e.info)
+   expr.operand = e
+   return expr
+}
+struct 'expr-cast[base'expr., operand'expr, type-src'type, stars-src'stars]
+expr-cast(e'expr, type'type, stars'stars, li'line-info)'expr {
+   expr'expr-cast = expr-alloc('expr-cast['usz], #cast, li)
+   expr.operand = e
+   expr.type-src = type
+   expr.stars-src = stars
+   return expr
+}
+expr-size-align-type(type'type, stars'stars, align'bool, li'line-info)'expr {
+   expr'expr-size-align = expr-alloc('expr-size-align['usz], #size-align, li)
+   expr.type-src = type
+   expr.stars-src = stars
+   expr.align = align
+   return expr
+}
+enum 'math-op[#add, #sub, #mul, #div, #mod, #shl, #shr, #and, #xor, #or, #lt, #le, #gt, #ge, #eq, #ne]'u8
+struct 'expr-math[base'expr., op'math-op, op1'expr, op2'expr]
+expr-math(op1'expr, op'math-op, op2'expr)'expr {
+   expr'expr-math = expr-alloc('expr-math['usz], #math, op1.info)
+   expr.op = op
+   expr.op1 = op1
+   expr.op2 = op2
+   return expr
+}
+struct 'expr-logical[base'expr., op1'expr, op2'expr, is-and'bool]
+expr-logical(op1'expr, is-and'bool, op2'expr)'expr {
+   expr'expr-logical = expr-alloc('expr-logical['usz], #logical, op1.info)
+   expr.op1 = op1
+   expr.op2 = op2
+   expr.is-and = is-and
+   return expr
+}
+struct 'expr-conditional[base'expr., condition'expr, then-expr'expr, false-expr'expr]
+expr-conditional(condition'expr, then-expr'expr, false-expr'expr)'expr {
+   expr'expr-conditional = expr-alloc('expr-conditional['usz], #conditional, condition.info)
+   expr.condition = condition
+   expr.then-expr = then-expr
+   expr.false-expr = false-expr
+   return expr
+}
+expr-is-zero(expr'expr)'bool {
+   if expr.type == #i32 {
+      integer'expr-i32 = expr
+      return integer.i32 == 0
+   }
+   return false
+}
+enum 'assign-op[#set, #add, #sub, #mul, #div, #mod, #shl, #shr, #and, #xor, #or]'u8
+struct 'expr-assign[base'expr., op'assign-op, des'expr, src'expr]
+expr-assign(des'expr, op'assign-op, src'expr)'expr {
+   expr'expr-assign = expr-alloc('expr-assign['usz], #assign, des.info)
+   expr.op = op
+   expr.des = des
+   expr.src = src
+   return expr
+}
+struct 'expr-var[base'expr., global'bool, var-idx'u32]
+expr-var(name'id, li'line-info)'expr {
+   expr'expr-var = expr-alloc('expr-var['usz], #var, li)
+   i' = .lvar-name-c
+   loop i > 0 {
+      i--
+      if .lvar-name-id-v[i] == name {
+         expr.var-idx = .lvar-name-idx-v[i]
+         return expr
+      }
+   }
+   loop j' = 0; .gvar-c; j++ {
+      if .gvar-name-v[j] == name {
+         expr.global = true
+         expr.var-idx = j
+         return expr
+      }
+   }
+   'c1.stdout{expr.base ": Variable '" name "' was not found\n"}
+   'c.exit(#failure)
+   return null
+}
+expr-array-dim-start(expr'expr)'u32 {
+   switch expr.type {
+      case #var {
+         var'expr-var = expr
+         if var.global {
+            return .gvar-v[var.var-idx].array-dim-start
+         }
+         return .lvar-v[var.var-idx].array-dim-start
+      }
+      case #field {
+         field'expr-field = expr
+         return field.array-dim-start
+      }
+      case #index {
+         index'expr-index = expr
+         return index.array-dim-start
+      }
+   }
+   return 0
+}
+expr-array-dim-c(expr'expr)'u32 {
+   switch expr.type {
+      case #var {
+         var'expr-var = expr
+         if var.global {
+            return .gvar-v[var.var-idx].array-dim-c
+         }
+         return .lvar-v[var.var-idx].array-dim-c
+      }
+      case #field {
+         field'expr-field = expr
+         return field.array-dim-c
+      }
+      case #index {
+         index'expr-index = expr
+         return index.array-dim-c
+      }
+   }
+   return 0
+}
+expr-array-size(expr'expr)'u32 {
+   switch expr.type {
+      case #var {
+         var'expr-var = expr
+         if var.global {
+            return .gvar-v[var.var-idx].array-size
+         }
+         return .lvar-v[var.var-idx].array-size
+      }
+      case #field {
+         field'expr-field = expr
+         return field.array-size
+      }
+      case #index {
+         index'expr-index = expr
+         if index.array-dim-c != 0 {
+            return index.array-size
+         }
+      }
+      case #string {
+         string'expr-string = expr
+         return string.str-len + 1
+      }
+   }
+   return 0
+}
+expr-index-address(expr'expr-index, out-stars-c'stars&)'type {
+   type' = expr.obj.output(obj-stars-c?, obj-stars-bc?)
+   if obj-stars-c == #0 {
+      'c1.stdout{expr.base ": Subscripted expression is not an array or pointer\n"}
+      'c.exit(#failure)
+   }
+   index-type' = expr.index.output(index-stars-c?, index-stars-bc?)
+   if (||, index-stars-c != #0, !index-type.is-integer()) {
+      'c1.stdout{expr.index ": Array index must have an integer type\n"}
+      'c.exit(#failure)
+   }
+   array-dim-c' = expr-array-dim-c(expr.obj)
+   element-size'u32 = 0
+   if array-dim-c != 0 {
+      array-dim-start' = expr-array-dim-start(expr.obj)
+      outer-len' = .array-dim-v[array-dim-start]
+      expr.array-dim-start = array-dim-start + 1
+      expr.array-dim-c = array-dim-c - 1
+      expr.array-size = expr-array-size(expr.obj) / outer-len
+      element-size = expr.array-size
+      if expr.array-dim-c != 0 {
+         out-stars-c = obj-stars-c
+      } else {
+         out-stars-c = obj-stars-c - 'stars(1)
+      }
+   } else {
+      out-stars-c = obj-stars-c - 'stars(1)
+      element-size = type-storage-size(type, out-stars-c, expr.base.info)
+   }
+   bc-push-i32(element-size)
+   bc-int-binary(#mul, target-size-type())
+   bc-op(#addr-add)
+   return type
+}
+struct 'expr[info'line-info., type'expr-type] {
+   // out-stars-c are number of asterisks in C
+   // out-stars-bc are number of asterisks in bytecode
+   output(expr-base'this, out-stars-c'stars&, out-stars-bc'stars&)'type {
+      switch expr-base.type {
+         case #call {
+            expr'expr-call = expr-base
+            func' = expr.func
+            func-arg-start' = func.arg-start
+            loop i' = 0; expr.arg-c; i++ {
+               farg' = .func-decl-arg-v[func-arg-start + i]
+               type' = expr.arg-v[i].output(stars-c?, stars-bc?)
+               scalar-convert-assignment(type, stars-c, farg.type-final, farg.stars-final, expr.base.info)
+            }
+            if func.cm1 {
+               bc-op(#call-cm1)
+            } else {
+               bc-op(#call-c)
+            }
+            bc-n16(func.func-idx)
+            type' = func.type-final
+            if (&&, type.is-aggregate(), func.stars-final == #0) {
+               out-stars-c = #0
+               out-stars-bc = #1
+            } else {
+               out-stars-c = func.stars-final
+               out-stars-bc = func.stars-final
+            }
+            return func.type-final
+         }
+         case #i32 {
+            expr'expr-i32 = expr-base
+            bc-op(#push-i32)
+            bc-n32(expr.i32)
+            out-stars-c = #0
+            out-stars-bc = #0
+            return .type-v[5]
+         }
+         case #string {
+            expr'expr-string = expr-base
+            bc-op(#push-string)
+            if .expr-discard-bytecode-depth == 0 {
+               expr.bytecode-offset = .cm1-bytecode-wtr.p4
+            }
+            bc-n32(expr.str-offset)
+            out-stars-c = #1
+            out-stars-bc = #1
+            if char-is-signed() { return .type-v[1] }
+            return .type-v[2]
+         }
+         case #f32 {
+            expr'expr-f32 = expr-base
+            bc-push-f32(expr.value)
+            out-stars-c = #0
+            out-stars-bc = #0
+            return .type-v[9]
+         }
+         case #f64 {
+            expr'expr-f64 = expr-base
+            bc-push-f64(expr.value)
+            out-stars-c = #0
+            out-stars-bc = #0
+            return .type-v[10]
+         }
+         case #unary {
+            expr'expr-unary = expr-base
+            e-base' = expr.expr
+            switch expr.op {
+               case #amp {
+                  switch e-base.type {
+                     case #var {
+                        type' = e-base.output(stars-c?, stars-bc?)
+                        if (&&, stars-c == #0, type.is-aggregate()) {
+                           out-stars-c = #1
+                           out-stars-bc = #1
+                           return type
+                        }
+                     }
+                     case #index {
+                        index'expr-index = e-base
+                        type' = expr-index-address(index, stars-c?)
+                        out-stars-c = stars-c + 'stars(1)
+                        out-stars-bc = stars-c + 'stars(1)
+                        return type
+                     }
+                     default {
+                        'c1.stdout{expr-base ": '&' operator is not supported here\n"}
+                        'c.exit(#failure)
+                     }
+                  }
+               }
+               case #star {
+                  type' = e-base.output(stars-c?, stars-bc?)
+                  if stars-c == #0 {
+                     'c1.stdout{expr-base ": '*' operator is not supported here\n"}
+                     'c.exit(#failure)
+                  }
+                  stars-c--
+                  if stars-c == #0 {
+                     if type.is-aggregate() {
+                        out-stars-c = #0
+                        out-stars-bc = #1
+                        return type
+                     } elif type.is-arithmetic() {
+                        bc-zero()
+                        bc-push-mem-arithmetic(type)
+                        out-stars-c = #0
+                        out-stars-bc = #0
+                        return type
+                     }
+                  } else {
+                     bc-zero()
+                     bc-op(#push-mem-ptr)
+                     out-stars-c = stars-c
+                     out-stars-bc = stars-c
+                     return type
+                  }
+                  'c1.stdout{expr-base ": '*' operator cannot load this type\n"}
+                  'c.exit(#failure)
+               }
+               case #plus {
+                  type' = e-base.output(stars-c?, stars-bc?)
+                  if (||, stars-c != #0, !type.is-arithmetic()) {
+                     'c1.stdout{expr-base ": Unary '+' requires an arithmetic operand\n"}
+                     'c.exit(#failure)
+                  }
+                  if type.is-integer() {
+                     type = type.integer-promote()
+                     bc-int-convert(type)
+                  }
+                  out-stars-c = #0
+                  out-stars-bc = #0
+                  return type
+               }
+               case #minus {
+                  type' = e-base.output(stars-c?, stars-bc?)
+                  if (||, stars-c != #0, !type.is-arithmetic()) {
+                     'c1.stdout{expr-base ": Unary '-' requires an arithmetic operand\n"}
+                     'c.exit(#failure)
+                  }
+                  if type.is-integer() {
+                     type = type.integer-promote()
+                     bc-int-convert(type)
+                     bc-op(#ineg)
+                     bc-int-convert(type)
+                  } else {
+                     bc-op(#fneg)
+                     bc-n8('u8(type.kind))
+                  }
+                  out-stars-c = #0
+                  out-stars-bc = #0
+                  return type
+               }
+               case #tilde {
+                  type' = e-base.output(stars-c?, stars-bc?)
+                  if (||, stars-c != #0, !type.is-integer()) {
+                     'c1.stdout{expr-base ": Unary '~' requires an integer operand\n"}
+                     'c.exit(#failure)
+                  }
+                  type = type.integer-promote()
+                  bc-int-convert(type)
+                  bc-op(#bit-not)
+                  bc-int-convert(type)
+                  out-stars-c = #0
+                  out-stars-bc = #0
+                  return type
+               }
+               case #bang {
+                  type' = e-base.output(stars-c?, stars-bc?)
+                  if (&&, stars-c == #0, !type.is-arithmetic()) {
+                     'c1.stdout{expr-base ": Unary '!' requires a scalar operand\n"}
+                     'c.exit(#failure)
+                  }
+                  bc-scalar-to-bool(type, stars-c)
+                  bc-op(#logical-not)
+                  out-stars-c = #0
+                  out-stars-bc = #0
+                  return .type-v[5]
+               }
+               default {
+                  'c1.stdout{expr-base ": Not yet implemented #9658\n"}
+                  'c.exit(#failure)
+               }
+            }
+         }
+         case #var {
+            expr'expr-var = expr-base
+            var-idx' = expr.var-idx
+            if expr.global {
+               gvar' = .gvar-v[var-idx]
+               bc-op(#gvar-push)
+               bc-n32(var-idx)
+               gvar-type' = gvar.type-final
+               stars' = gvar.stars-final
+               if gvar.array-dim-c != 0 {
+                  out-stars-c = stars + 'stars(1)
+                  out-stars-bc = stars + 'stars(1)
+                  return gvar-type
+               } elif stars == #0 {
+                  if gvar-type.is-aggregate() {
+                     out-stars-c = #0
+                     out-stars-bc = #1
+                     return gvar-type
+                  } elif gvar-type.is-arithmetic() {
+                     bc-zero()
+                     bc-push-mem-arithmetic(gvar-type)
+                     out-stars-c = #0
+                     out-stars-bc = #0
+                     return gvar-type
+                  } else {
+                     'c1.stdout{expr-base ": Not yet implemented #1239\n"}
+                     'c.exit(#failure)
+                  }
+               } else {
+                  out-stars-c = stars
+                  out-stars-bc = stars
+                  return gvar-type
+               }
+            } else {
+               lvar' = .lvar-v[var-idx]
+               lvar-type' = lvar.type-final
+               if lvar.array-dim-c != 0 {
+                  bc-op(#lvar-push)
+                  bc-n16(var-idx)
+                  out-stars-c = lvar.stars-final + 'stars(1)
+                  out-stars-bc = lvar.stars-final + 'stars(1)
+                  return lvar-type
+               } elif lvar.stars-final == #0 {
+                  if lvar-type.is-aggregate() {
+                     bc-op(#lvar-push)
+                     bc-n16(var-idx)
+                     out-stars-c = #0
+                     out-stars-bc = #1
+                     return lvar-type
+                  } elif lvar-type.is-arithmetic() {
+                     bc-op(#lvar-push)
+                     bc-n16(var-idx)
+                     out-stars-c = #0
+                     out-stars-bc = #0
+                     return lvar-type
+                  } else {
+                     'c1.stdout{expr-base ": Not yet implemented #2295\n"}
+                     'c.exit(#failure)
+                  }
+               } else {
+                  bc-op(#lvar-push)
+                  bc-n16(var-idx)
+                  out-stars-c = lvar.stars-final
+                  out-stars-bc = lvar.stars-final
+                  return lvar-type
+               }
+            }
+         }
+         case #field {
+            expr'expr-field = expr-base
+            type' = expr.obj.output(stars-c?, stars-bc?)
+            if !type.is-aggregate() {
+               'c1.stdout{expr-base ": Member access on a variable type that is not a struct or union: " type.kind "\n"}
+               'c.exit(#failure)
+            }
+            if stars-c == #0 {
+               if expr.arrow {
+                  'c1.stdout{expr-base ": Dot must be used instead of arrow\n"}
+                  'c.exit(#failure)
+               }
+            } elif stars-c == #1 {
+               if !expr.arrow {
+                  'c1.stdout{expr-base ": Arrow must be used instead of dot\n"}
+                  'c.exit(#failure)
+               }
+            } else {
+               'c1.stdout{expr-base ": Not yet implemented #8122\n"}
+               'c.exit(#failure)
+            }
+            field-v' = type.field-v
+            field-name' = expr.field-name
+            loop i' = 0; type.field-c; i++ {
+               field' = field-v[i]
+               if field.name == field-name {
+                  field-type' = field.type-final
+                  bc-push-i32(field.offset)
+                  expr.array-dim-start = field.array-dim-start
+                  expr.array-dim-c = field.array-dim-c
+                  expr.array-size = field.array-size
+                  if field.array-dim-c != 0 {
+                     bc-op(#addr-add)
+                     out-stars-c = field.stars-final + 'stars(1)
+                     out-stars-bc = field.stars-final + 'stars(1)
+                     return field-type
+                  } elif field.stars-final == #0 {
+                     if field-type.is-arithmetic() {
+                        bc-push-mem-arithmetic(field-type)
+                        out-stars-c = #0
+                        out-stars-bc = #0
+                        return field-type
+                     }
+                     switch field-type.kind {
+                        case #struct {
+                           bc-op(#addr-add)
+                           out-stars-c = #0
+                           out-stars-bc = #1
+                           return field-type
+                        }
+                        case #union {
+                           bc-op(#addr-add)
+                           out-stars-c = #0
+                           out-stars-bc = #1
+                           return field-type
+                        }
+                        default {
+                           'c1.stdout{expr-base ": Not yet implemented #2183\n"}
+                           'c.exit(#failure)
+                        }
+                     }
+                  } else {
+                     bc-op(#push-mem-ptr)
+                     out-stars-c = field.stars-final
+                     out-stars-bc = field.stars-final
+                     return field-type
+                  }
+               }
+            }
+            'c1.stdout{expr-base ": Member field not found\n"}
+            'c.exit(#failure)
+         }
+         case #index {
+            expr'expr-index = expr-base
+            type' = expr-index-address(expr, stars-c?)
+            if expr.array-dim-c != 0 {
+               out-stars-c = stars-c
+               out-stars-bc = stars-c
+               return type
+            }
+            if stars-c == #0 {
+               if type.is-arithmetic() {
+                  bc-zero()
+                  bc-push-mem-arithmetic(type)
+                  out-stars-c = #0
+                  out-stars-bc = #0
+                  return type
+               } elif type.is-aggregate() {
+                  out-stars-c = #0
+                  out-stars-bc = #1
+                  return type
+               }
+            } else {
+               bc-zero()
+               bc-op(#push-mem-ptr)
+               out-stars-c = stars-c
+               out-stars-bc = stars-c
+               return type
+            }
+            'c1.stdout{expr-base ": Array element type cannot be loaded\n"}
+            'c.exit(#failure)
+         }
+         case #inc-dec {
+            expr'expr-inc-dec = expr-base
+            des-base' = expr.expr
+            mode'u8 = 0
+            if expr.increment {
+               mode = 1
+            }
+            if expr.prefix {
+               mode += 2
+            }
+            switch des-base.type {
+               case #var {
+                  des'expr-var = des-base
+                  var-idx' = des.var-idx
+                  if des.global {
+                     gvar' = .gvar-v[var-idx]
+                     type' = gvar.type-final
+                     if (||, gvar.array-dim-c != 0, gvar.stars-final != #0, !type.is-arithmetic()) {
+                        'c1.stdout{expr-base ": Increment and decrement require a modifiable arithmetic lvalue\n"}
+                        'c.exit(#failure)
+                     }
+                     bc-op(#gvar-push)
+                     bc-n32(var-idx)
+                     bc-zero()
+                     if type.is-integer() {
+                        bc-op(#mem-inc-dec-int)
+                     } else {
+                        bc-op(#mem-inc-dec-float)
+                     }
+                     bc-inc-dec-arg(mode, type)
+                     out-stars-c = #0
+                     out-stars-bc = #0
+                     return type
+                  } else {
+                     lvar' = .lvar-v[var-idx]
+                     type' = lvar.type-final
+                     if (||, lvar.array-dim-c != 0, lvar.stars-final != #0, !type.is-arithmetic()) {
+                        'c1.stdout{expr-base ": Increment and decrement require a modifiable arithmetic lvalue\n"}
+                        'c.exit(#failure)
+                     }
+                     if type.is-integer() {
+                        bc-op(#lvar-inc-dec-int)
+                     } else {
+                        bc-op(#lvar-inc-dec-float)
+                     }
+                     bc-n16(var-idx)
+                     bc-inc-dec-arg(mode, type)
+                     out-stars-c = #0
+                     out-stars-bc = #0
+                     return type
+                  }
+               }
+               case #field {
+                  des'expr-field = des-base
+                  obj-type' = des.obj.output(obj-stars-c?, obj-stars-bc?)
+                  if !obj-type.is-aggregate() {
+                     'c1.stdout{des.obj ": Field access on a variable that is not a struct or union\n"}
+                     'c.exit(#failure)
+                  }
+                  if obj-stars-c == #0 {
+                     if des.arrow {
+                        'c1.stdout{des.obj ": Dot must be used instead of arrow\n"}
+                        'c.exit(#failure)
+                     }
+                  } elif obj-stars-c == #1 {
+                     if !des.arrow {
+                        'c1.stdout{des.obj ": Arrow must be used instead of dot\n"}
+                        'c.exit(#failure)
+                     }
+                  } else {
+                     'c1.stdout{des.obj ": Not yet implemented #1048\n"}
+                     'c.exit(#failure)
+                  }
+                  field-v' = obj-type.field-v
+                  field-name' = des.field-name
+                  loop i' = 0; obj-type.field-c; i++ {
+                     field' = field-v[i]
+                     if field.name == field-name {
+                        field-type' = field.type-final
+                        if (||, field.array-dim-c != 0, field.stars-final != #0, !field-type.is-arithmetic()) {
+                           'c1.stdout{expr-base ": Increment and decrement require a modifiable arithmetic lvalue\n"}
+                           'c.exit(#failure)
+                        }
+                        bc-push-i32(field.offset)
+                        if field-type.is-integer() {
+                           bc-op(#mem-inc-dec-int)
+                        } else {
+                           bc-op(#mem-inc-dec-float)
+                        }
+                        bc-inc-dec-arg(mode, field-type)
+                        out-stars-c = #0
+                        out-stars-bc = #0
+                        return field-type
+                     }
+                  }
+                  'c1.stdout{des.obj ": Member field '" field-name "' not found.\n"}
+                  'c.exit(#failure)
+               }
+               case #index {
+                  des'expr-index = des-base
+                  type' = expr-index-address(des, stars-c?)
+                  if (||, stars-c != #0, !type.is-arithmetic()) {
+                     'c1.stdout{expr-base ": Increment and decrement require a modifiable arithmetic lvalue\n"}
+                     'c.exit(#failure)
+                  }
+                  bc-zero()
+                  if type.is-integer() {
+                     bc-op(#mem-inc-dec-int)
+                  } else {
+                     bc-op(#mem-inc-dec-float)
+                  }
+                  bc-inc-dec-arg(mode, type)
+                  out-stars-c = #0
+                  out-stars-bc = #0
+                  return type
+               }
+               default {
+                  'c1.stdout{expr-base ": Increment and decrement require a modifiable arithmetic lvalue\n"}
+                  'c.exit(#failure)
+               }
+            }
+         }
+         case #size-align {
+            expr'expr-size-align = expr-base
+            type'type = null
+            stars-c'stars = #0
+            stars-bc'stars = #0
+            array-size'u32 = 0
+            if expr.operand == null {
+               type = expr.type-src.final-type(expr.stars-src, stars-c)
+            } else {
+               // Type-check the operand, then discard its bytecode because sizeof does not evaluate it.
+               bc-pos' = .cm1-bytecode-wtr.pos
+               .expr-discard-bytecode-depth++
+               type = expr.operand.output(stars-c, stars-bc)
+               .expr-discard-bytecode-depth--
+               .cm1-bytecode-wtr.pos = bc-pos
+               array-size = expr-array-size(expr.operand)
+            }
+            value'u32 = 0
+            if array-size != 0 {
+               value = array-size
+            } elif stars-c != #0 {
+               value = 'usz['usz]
+            } elif expr.align {
+               value = type-storage-align(type, #0, expr-base.info)
+            } else {
+               value = type-storage-size(type, #0, expr-base.info)
+            }
+            bc-push-usz(value)
+            out-stars-c = #0
+            out-stars-bc = #0
+            return target-size-type()
+         }
+         case #cast {
+            expr'expr-cast = expr-base
+            src-type' = expr.operand.output(src-stars-c?, src-stars-bc?)
+            des-type' = expr.type-src.final-type(expr.stars-src, des-stars-c?)
+            if (&&, src-stars-c == #0, des-stars-c == #0) {
+               if (&&, src-type.is-arithmetic(), des-type.is-arithmetic()) {
+                  bc-number-convert(src-type, des-type)
+                  out-stars-c = #0
+                  out-stars-bc = #0
+                  return des-type
+               }
+            }
+            if (||, src-type != des-type, src-stars-c != des-stars-c) {
+               'c1.stdout{expr-base ": Unsupported cast\n"}
+               'c.exit(#failure)
+            }
+            out-stars-c = des-stars-c
+            out-stars-bc = des-stars-c
+            return des-type
+         }
+         case #assign {
+            expr'expr-assign = expr-base
+            des-base' = expr.des
+            switch des-base.type {
+               case #var {
+                  des'expr-var = des-base
+                  var-idx' = des.var-idx
+                  if des.global {
+                     gvar' = .gvar-v[var-idx]
+                     if gvar.array-dim-c != 0 {
+                        'c1.stdout{expr-base ": Arrays are not assignable\n"}
+                        'c.exit(#failure)
+                     }
+                     type' = gvar.type-final
+                     stars' = gvar.stars-final
+                     if stars == #0 {
+                        if type.is-aggregate() {
+                           if expr.op != #set {
+                              'c1.stdout{expr-base ": Invalid assignment type\n"}
+                              'c.exit(#failure)
+                           }
+                           bc-op(#gvar-push)
+                           bc-n32(var-idx)
+                           type2' = expr.src.output(stars2-c?, stars2-bc?)
+                           if (||, type2 != type, stars2-c != stars) {
+                              'c1.stdout{expr-base ": Type mismatch\n"}
+                              'c.exit(#failure)
+                           }
+                           bc-push-usz(type.size)
+                           bc-op(#copy-mem)
+                           out-stars-c = #0
+                           out-stars-bc = #1
+                           return type
+                        } elif type.is-arithmetic() {
+                           bc-op(#gvar-push)
+                           bc-n32(var-idx)
+                           bc-zero()
+                           if expr.op != #set {
+                              bc-op(#dup-pair)
+                              bc-push-mem-arithmetic(type)
+                           }
+                           type2' = expr.src.output(stars2-c?, stars2-bc?)
+                           if stars2-c != #0 {
+                              'c1.stdout{expr-base ": Arithmetic assignment requires an arithmetic value\n"}
+                              'c.exit(#failure)
+                           }
+                           if expr.op == #set {
+                              scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                           } else {
+                              bc-arithmetic-compound(expr.op, type, type2, expr-base.info)
+                           }
+                           bc-set-mem-arithmetic(type)
+                           out-stars-c = #0
+                           out-stars-bc = #0
+                           return type
+                        } else {
+                           'c1.stdout{expr-base ": Not yet implemented #8821\n"}
+                           'c.exit(#failure)
+                        }
+                     } else {
+                        'c1.stdout{expr-base ": Not yet implemented #9542\n"}
+                        'c.exit(#failure)
+                     }
+                  } else {
+                     lvar' = .lvar-v[var-idx]
+                     if lvar.array-dim-c != 0 {
+                        if expr.src == null {
+                           bc-op(#lvar-push)
+                           bc-n16(var-idx)
+                           bc-push-usz(lvar.array-size)
+                           bc-op(#zero-mem)
+                           out-stars-c = lvar.stars-final + 'stars(1)
+                           out-stars-bc = lvar.stars-final + 'stars(1)
+                           return lvar.type-final
+                        }
+                        'c1.stdout{expr-base ": Arrays are not assignable\n"}
+                        'c.exit(#failure)
+                     }
+                     if expr.src == null {
+                        // Initialize variable to zero
+                        type' = lvar.type-final
+                        stars' = lvar.stars-final
+                        if (&&, stars == #0, type.is-aggregate()) {
+                           bc-op(#lvar-push)
+                           bc-n16(var-idx)
+                           bc-push-usz(type.size)
+                           bc-op(#zero-mem)
+                           out-stars-c = #0
+                           out-stars-bc = #1
+                           return type
+                        } else {
+                           bc-op(#push-zero)
+                           bc-op(#lvar-set)
+                           bc-n16(var-idx)
+                           out-stars-c = stars
+                           out-stars-bc = stars
+                           return type
+                        }
+                     }
+                     type' = lvar.type-final
+                     stars' = lvar.stars-final
+                     if stars == #0 {
+                        if type.is-aggregate() {
+                           if expr.op != #set {
+                              'c1.stdout{expr-base ": Invalid assignment type\n"}
+                              'c.exit(#failure)
+                           }
+                           bc-op(#lvar-push)
+                           bc-n16(var-idx)
+                           type2' = expr.src.output(stars2-c?, stars2-bc?)
+                           if (||, type2 != type, stars2-c != #0) {
+                              'c1.stdout{expr-base ": Type mismatch\n"}
+                              'c.exit(#failure)
+                           }
+                           bc-push-usz(type.size)
+                           bc-op(#copy-mem)
+                           out-stars-c = #0
+                           out-stars-bc = #1
+                           return type
+                        } elif type.is-arithmetic() {
+                           if expr.op == #set {
+                              type2' = expr.src.output(stars2-c?, stars2-bc?)
+                              scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                           } else {
+                              bc-op(#lvar-push)
+                              bc-n16(var-idx)
+                              type2' = expr.src.output(stars2-c?, stars2-bc?)
+                              if stars2-c != #0 {
+                                 'c1.stdout{expr-base ": Arithmetic assignment requires an arithmetic value\n"}
+                                 'c.exit(#failure)
+                              }
+                              bc-arithmetic-compound(expr.op, type, type2, expr-base.info)
+                           }
+                           bc-op(#lvar-set)
+                           bc-n16(var-idx)
+                           out-stars-c = #0
+                           out-stars-bc = #0
+                           return type
+                        } else {
+                           'c1.stdout{expr-base ": Not yet implemented #7218\n"}
+                           'c.exit(#failure)
+                        }
+                     } else {
+                        switch expr.op {
+                           case #set {
+                              type2' = expr.src.output(stars2-c?, stars2-bc?)
+                              if (||, type2 != type, stars2-c != stars) {
+                                 'c1.stdout{expr-base ": Type mismatch\n"}
+                                 'c.exit(#failure)
+                              }
+                              bc-op(#lvar-set)
+                              bc-n16(var-idx)
+                              out-stars-c = stars
+                              out-stars-bc = stars
+                              return type
+                           }
+                           default {
+                              'c1.stdout{expr-base ": Not yet implemented #0124\n"}
+                              'c.exit(#failure)
+                           }
+                        }
+                     }
+                  }
+               }
+               case #field {
+                  des'expr-field = des-base
+                  obj-type' = des.obj.output(obj-stars-c?, obj-stars-bc?)
+                  if !obj-type.is-aggregate() {
+                     'c1.stdout{des.obj ": Field access on a variable that is not a struct or union\n"}
+                     'c.exit(#failure)
+                  }
+                  if obj-stars-c == #0 {
+                     if des.arrow {
+                        'c1.stdout{des.obj ": Dot must be used instead of arrow\n"}
+                        'c.exit(#failure)
+                     }
+                  } elif obj-stars-c == #1 {
+                     if !des.arrow {
+                        'c1.stdout{des.obj ": Arrow must be used instead of dot\n"}
+                        'c.exit(#failure)
+                     }
+                  } else {
+                     'c1.stdout{des.obj ": Not yet implemented #4398\n"}
+                     'c.exit(#failure)
+                  }
+                  field-v' = obj-type.field-v
+                  field-name' = des.field-name
+                  loop i' = 0; obj-type.field-c; i++ {
+                     field' = field-v[i]
+                     if field.name == field-name {
+                        if field.array-dim-c != 0 {
+                           'c1.stdout{expr-base ": Arrays are not assignable\n"}
+                           'c.exit(#failure)
+                        }
+                        field-type' = field.type-final
+                        field-stars' = field.stars-final
+                        bc-push-i32(field.offset)
+                        if (&&, field-stars == #0, field-type.is-arithmetic()) {
+                           if expr.op != #set {
+                              // Keep the address and offset while loading the old value.
+                              bc-op(#dup-pair)
+                              bc-push-mem-arithmetic(field-type)
+                           }
+                           type' = expr.src.output(stars-c?, stars-bc?)
+                           if stars-c != #0 {
+                              'c1.stdout{expr-base ": Arithmetic assignment requires an arithmetic value\n"}
+                              'c.exit(#failure)
+                           }
+                           if expr.op == #set {
+                              scalar-convert-assignment(type, stars-c, field-type, #0, expr-base.info)
+                           } else {
+                              bc-arithmetic-compound(expr.op, field-type, type, expr-base.info)
+                           }
+                           bc-set-mem-arithmetic(field-type)
+                           out-stars-c = #0
+                           out-stars-bc = #0
+                           return field-type
+                        }
+                        'c1.stdout{expr-base ": Field assignment is not supported for this type\n"}
+                        'c.exit(#failure)
+                     }
+                  }
+                  'c1.stdout{des.obj ": Member field '" field-name "' not found.\n"}
+                  'c.exit(#failure)
+               }
+               case #index {
+                  des'expr-index = des-base
+                  type' = expr-index-address(des, stars-c?)
+                  if des.array-dim-c != 0 {
+                     'c1.stdout{expr-base ": Arrays are not assignable\n"}
+                     'c.exit(#failure)
+                  }
+                  if stars-c == #0 {
+                     if type.is-arithmetic() {
+                        bc-zero()
+                        if expr.op != #set {
+                           bc-op(#dup-pair)
+                           bc-push-mem-arithmetic(type)
+                        }
+                        type2' = expr.src.output(stars2-c?, stars2-bc?)
+                        if stars2-c != #0 {
+                           'c1.stdout{expr-base ": Arithmetic assignment requires an arithmetic value\n"}
+                           'c.exit(#failure)
+                        }
+                        if expr.op == #set {
+                           scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                        } else {
+                           bc-arithmetic-compound(expr.op, type, type2, expr-base.info)
+                        }
+                        bc-set-mem-arithmetic(type)
+                        out-stars-c = #0
+                        out-stars-bc = #0
+                        return type
+                     } elif type.is-aggregate() {
+                        if expr.op != #set {
+                           'c1.stdout{expr-base ": Invalid assignment type\n"}
+                           'c.exit(#failure)
+                        }
+                        type2' = expr.src.output(stars2-c?, stars2-bc?)
+                        if (||, type2 != type, stars2-c != #0) {
+                           'c1.stdout{expr-base ": Type mismatch\n"}
+                           'c.exit(#failure)
+                        }
+                        bc-push-usz(type.size)
+                        bc-op(#copy-mem)
+                        out-stars-c = #0
+                        out-stars-bc = #1
+                        return type
+                     }
+                  } else {
+                     if expr.op != #set {
+                        'c1.stdout{expr-base ": Invalid assignment type\n"}
+                        'c.exit(#failure)
+                     }
+                     bc-zero()
+                     type2' = expr.src.output(stars2-c?, stars2-bc?)
+                     if (||, type2 != type, stars2-c != stars-c) {
+                        'c1.stdout{expr-base ": Type mismatch\n"}
+                        'c.exit(#failure)
+                     }
+                     bc-op(#set-mem-ptr)
+                     out-stars-c = stars-c
+                     out-stars-bc = stars-c
+                     return type
+                  }
+                  'c1.stdout{expr-base ": Array element type cannot be assigned\n"}
+                  'c.exit(#failure)
+               }
+            }
+            'c1.stdout{expr-base ": Assigning to an expression type #" des-base.type " is not yet implemented\n"}
+            'c.exit(#failure)
+         }
+         case #conditional {
+            expr'expr-conditional = expr-base
+
+            // Determine both branch types without retaining their bytecode so
+            // the selected branch can be converted to one common result type.
+            saved-pos' = .cm1-bytecode-wtr.pos
+            .expr-discard-bytecode-depth++
+            then-type' = expr.then-expr.output(then-stars-c?, then-stars-bc?)
+            .cm1-bytecode-wtr.pos = saved-pos
+            false-type' = expr.false-expr.output(false-stars-c?, false-stars-bc?)
+            .expr-discard-bytecode-depth--
+            .cm1-bytecode-wtr.pos = saved-pos
+
+            result-type'type = null
+            result-stars-c'stars = #0
+            result-stars-bc'stars = #0
+            arithmetic-result'bool = false
+            then-null' = expr-is-zero(expr.then-expr)
+            false-null' = expr-is-zero(expr.false-expr)
+
+            if (&&, then-stars-c == #0, false-stars-c == #0,
+               then-type.is-arithmetic(), false-type.is-arithmetic()) {
+               result-type = arithmetic-common-type(then-type, false-type)
+               arithmetic-result = true
+            } elif (&&, then-type == false-type, then-stars-c == false-stars-c,
+               then-stars-bc == false-stars-bc) {
+               result-type = then-type
+               result-stars-c = then-stars-c
+               result-stars-bc = then-stars-bc
+            } elif (&&, then-stars-c != #0, false-stars-c == #0, false-null) {
+               result-type = then-type
+               result-stars-c = then-stars-c
+               result-stars-bc = then-stars-bc
+            } elif (&&, false-stars-c != #0, then-stars-c == #0, then-null) {
+               result-type = false-type
+               result-stars-c = false-stars-c
+               result-stars-bc = false-stars-bc
+            } elif (&&, then-stars-c != #0, then-stars-c == false-stars-c,
+               (||, then-type.kind == #void, false-type.kind == #void)) {
+               if then-type.kind == #void {
+                  result-type = then-type
+                  result-stars-bc = then-stars-bc
+               } else {
+                  result-type = false-type
+                  result-stars-bc = false-stars-bc
+               }
+               result-stars-c = then-stars-c
+            } else {
+               'c1.stdout{expr-base ": Ternary branches have incompatible types\n"}
+               'c.exit(#failure)
+            }
+
+            condition-type' = expr.condition.output(condition-stars-c?, condition-stars-bc?)
+            if (&&, condition-stars-c == #0, !condition-type.is-arithmetic()) {
+               'c1.stdout{expr.condition ": Ternary condition must have a scalar type\n"}
+               'c.exit(#failure)
+            }
+            bc-scalar-to-bool(condition-type, condition-stars-c)
+            false-jump-ptr' = bc-jump-begin(#jump-if-zero)
+
+            actual-then-type' = expr.then-expr.output(actual-then-stars-c?, actual-then-stars-bc?)
+            if arithmetic-result {
+               bc-number-convert(actual-then-type, result-type)
+            }
+            end-jump-ptr' = bc-jump-begin(#jump)
+            bc-jump-end(false-jump-ptr)
+
+            actual-false-type' = expr.false-expr.output(actual-false-stars-c?, actual-false-stars-bc?)
+            if arithmetic-result {
+               bc-number-convert(actual-false-type, result-type)
+            }
+            bc-jump-end(end-jump-ptr)
+
+            out-stars-c = result-stars-c
+            out-stars-bc = result-stars-bc
+            return result-type
+         }
+         case #logical {
+            expr'expr-logical = expr-base
+            type1' = expr.op1.output(stars1-c?, stars1-bc?)
+            if (&&, stars1-c == #0, !type1.is-arithmetic()) {
+               'c1.stdout{expr.op1 ": Logical operator requires scalar operands\n"}
+               'c.exit(#failure)
+            }
+            bc-scalar-to-bool(type1, stars1-c)
+            short-jump-ptr' = bc-jump-begin(#jump-if-zero)
+            if expr.is-and {
+               type2' = expr.op2.output(stars2-c?, stars2-bc?)
+               if (&&, stars2-c == #0, !type2.is-arithmetic()) {
+                  'c1.stdout{expr.op2 ": Logical operator requires scalar operands\n"}
+                  'c.exit(#failure)
+               }
+               bc-scalar-to-bool(type2, stars2-c)
+               bc-op(#logical-not)
+               bc-op(#logical-not)
+               end-jump-ptr' = bc-jump-begin(#jump)
+               bc-jump-end(short-jump-ptr)
+               bc-zero()
+               bc-jump-end(end-jump-ptr)
+            } else {
+               bc-push-i32(1)
+               end-jump-ptr' = bc-jump-begin(#jump)
+               bc-jump-end(short-jump-ptr)
+               type2' = expr.op2.output(stars2-c?, stars2-bc?)
+               if (&&, stars2-c == #0, !type2.is-arithmetic()) {
+                  'c1.stdout{expr.op2 ": Logical operator requires scalar operands\n"}
+                  'c.exit(#failure)
+               }
+               bc-scalar-to-bool(type2, stars2-c)
+               bc-op(#logical-not)
+               bc-op(#logical-not)
+               bc-jump-end(end-jump-ptr)
+            }
+            out-stars-c = #0
+            out-stars-bc = #0
+            return .type-v[5]
+         }
+         case #math {
+            expr'expr-math = expr-base
+            type1' = expr.op1.output(stars1-c?, stars1-bc?)
+            type2' = expr.op2.output(stars2-c?, stars2-bc?)
+            comparison' = (&&, expr.op >= #lt, expr.op <= #ne)
+            if (&&, stars1-c == #0, stars2-c == #0) {
+               if (&&, type1.is-arithmetic(), type2.is-arithmetic()) {
+                  if (||, type1.is-floating(), type2.is-floating()) {
+                     if (&&, expr.op > #div, !comparison) {
+                        'c1.stdout{expr-base ": This operator requires integer operands\n"}
+                        'c.exit(#failure)
+                     }
+                     result-type' = arithmetic-common-type(type1, type2)
+                     bc-float-binary(expr.op, type1, type2, result-type)
+                     out-stars-c = #0
+                     out-stars-bc = #0
+                     if comparison { return .type-v[5] }
+                     return result-type
+                  }
+                  result-type' = integer-common-type(type1, type2)
+                  if (||, expr.op == #shl, expr.op == #shr) {
+                     result-type = type1.integer-promote()
+                  }
+                  bc-int-binary(expr.op, result-type)
+                  out-stars-c = #0
+                  out-stars-bc = #0
+                  if comparison { return .type-v[5] }
+                  return result-type
+               }
+               'c1.stdout{expr-base ": Arithmetic operands must have arithmetic types\n"}
+               'c.exit(#failure)
+            }
+            if comparison {
+               if (||, type1 != type2, stars1-c != stars2-c) {
+                  'c1.stdout{expr-base ": Type mismatch for pointer comparison\n"}
+                  'c.exit(#failure)
+               }
+               bc-int-binary(expr.op, target-size-type())
+               out-stars-c = #0
+               out-stars-bc = #0
+               return .type-v[5]
+            }
+            // Pointer address calculations retain the existing bytecode path.
+            if (&&, stars1-c != #0, stars2-c == #0, type2.is-integer()) {
+               if expr.op == #add {
+                  bc-op(#addr-add)
+                  out-stars-c = stars1-c
+                  out-stars-bc = stars1-bc
+                  return type1
+               } elif expr.op == #sub {
+                  bc-op(#addr-sub)
+                  out-stars-c = stars1-c
+                  out-stars-bc = stars1-bc
+                  return type1
+               }
+            }
+            'c1.stdout{expr-base ": Unsupported pointer arithmetic\n"}
+            'c.exit(#failure)
+         }
+         default {
+            'c1.stdout{expr-base ": Method .output() not yet implemented in expression type #" expr-base.type " (" 'base(expr-base.type) ")\n"}
+            'c.exit(#failure)
+         }
+      }
+      'c1.stdout{expr-base ": Method .output() in expression type #" expr-base.type " (" 'base(expr-base.type) ") did not return a type\n"}
+      'c.exit(#failure)
+      return null
+   }
+}
+}
