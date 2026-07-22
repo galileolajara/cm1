@@ -430,6 +430,9 @@ parse(in-path'char @const[]) {
                if (&&, str[0] == ''0, (||, str[1] == ''x, str[1] == ''X)) {
                   base = 16
                   start = 2
+               } elif str[0] == ''0 {
+                  base = 8
+                  start = 1
                }
                loop i' = start; ; i++ {
                   c' = str[i]
@@ -1272,12 +1275,22 @@ bc-scalar-to-bool(type'type, stars'stars) {
       bc-n8('u8(type.kind))
    }
 }
-scalar-convert-assignment(src-type'type, src-stars'stars, des-type'type, des-stars'stars, li'line-info) {
+scalar-convert-assignment(src-type'type, src-stars'stars, src-null'bool,
+   des-type'type, des-stars'stars, li'line-info) {
    if (&&, src-stars == #0, des-stars == #0) {
       if (&&, src-type.is-arithmetic(), des-type.is-arithmetic()) {
          bc-number-convert(src-type, des-type)
          return
       }
+   }
+   // Clang accepts conversions between incompatible object-pointer types with
+   // a diagnostic. Cm1 has no warning tier, so preserve the pointer value and
+   // accept the conversion, matching the generated C build configuration.
+   if (&&, src-stars != #0, des-stars != #0) {
+      return
+   }
+   if (&&, src-null, src-stars == #0, src-type.is-integer(), des-stars != #0) {
+      return
    }
    if (||, src-type != des-type, src-stars != des-stars) {
       'c1.stdout{li ": Type mismatch\n"}
@@ -2024,6 +2037,7 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
             case #gvar {
                gvar'gvar = .decl-ptr-v[i]
                type' = gvar.type-src
+               if gvar.extern { f.add{"extern "} }
                if (||, type.is-aggregate(), type.kind == #enum) {
                      if (&&, gvar.stars-final == #0, type.field-v == null) {
                         'c1.stdout{gvar.info ": Struct, union, or enum '" type.name "' was used but it was never defined\n"}
@@ -2229,11 +2243,7 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
       loop i' = 0; .gvar-c; i++ {
          gvar' = .gvar-v[i]
          f.add{"      case " i ": {\n"}
-         if gvar.stars-final == #0 {
-            f.add{"         return &" gvar.name() ";\n"}
-         } else {
-            f.add{"         return " gvar.name() ";\n"}
-         }
+         f.add{"         return &" gvar.name() ";\n"}
          f.add{"      }\n"}
       }
       f.add{"   }\n"}
@@ -2404,6 +2414,13 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
          if !func.cm1 { continue }
          if func.code == null {
             'c1.stdout{func.info ": The function '" func.name() "' has no code.\n"}
+            i++
+            loop ; i < .func-c; i++ {
+               func = .func-v[i]
+               if !func.cm1 { continue }
+               if func.code != null { continue }
+               'c1.stdout{func.info ": The function '" func.name() "' has no code.\n"}
+            }
             'c.exit(#failure)
          }
          r2.ref = func.code

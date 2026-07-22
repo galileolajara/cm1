@@ -28,7 +28,8 @@ struct 'space[first'stmt, last'stmt, lvar-c'u16] {
                      'c.exit(#failure)
                   } else {
                      type' = stmt.expr.output(stars-c?, stars-bc?)
-                     scalar-convert-assignment(type, stars-c, .func.type-final, .func.stars-final, stmt-base.info)
+                     scalar-convert-assignment(type, stars-c, expr-is-zero(stmt.expr),
+                        .func.type-final, .func.stars-final, stmt-base.info)
                      bc-op(#pop-return)
                   }
                }

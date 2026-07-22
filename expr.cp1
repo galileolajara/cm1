@@ -470,7 +470,8 @@ struct 'expr[info'line-info., type'expr-type] {
             loop i' = 0; expr.arg-c; i++ {
                farg' = .func-decl-arg-v[func-arg-start + i]
                type' = expr.arg-v[i].output(stars-c?, stars-bc?)
-               scalar-convert-assignment(type, stars-c, farg.type-final, farg.stars-final, expr.base.info)
+               scalar-convert-assignment(type, stars-c, expr-is-zero(expr.arg-v[i]),
+                  farg.type-final, farg.stars-final, expr.base.info)
             }
             if func.cm1 {
                bc-op(#call-cm1)
@@ -556,6 +557,45 @@ struct 'expr[info'line-info., type'expr-type] {
                            out-stars-bc = lvar.stars-final + 'stars(1)
                            return lvar.type-final
                         }
+                     }
+                     case #field {
+                        field-expr'expr-field = e-base
+                        obj-type' = field-expr.obj.output(obj-stars-c?, obj-stars-bc?)
+                        if !obj-type.is-aggregate() {
+                           'c1.stdout{expr-base ": Member access on a variable type that is not a struct or union\n"}
+                           'c.exit(#failure)
+                        }
+                        if obj-stars-c == #0 {
+                           if field-expr.arrow {
+                              'c1.stdout{expr-base ": Dot must be used instead of arrow\n"}
+                              'c.exit(#failure)
+                           }
+                        } elif obj-stars-c == #1 {
+                           if !field-expr.arrow {
+                              'c1.stdout{expr-base ": Arrow must be used instead of dot\n"}
+                              'c.exit(#failure)
+                           }
+                        } else {
+                           'c1.stdout{expr-base ": Too many pointer levels for member access\n"}
+                           'c.exit(#failure)
+                        }
+                        field-v' = obj-type.field-v
+                        loop i' = 0; obj-type.field-c; i++ {
+                           field' = field-v[i]
+                           if field.name == field-expr.field-name {
+                              if field.array-dim-c != 0 {
+                                 'c1.stdout{expr-base ": Taking the address of an array member is not supported\n"}
+                                 'c.exit(#failure)
+                              }
+                              bc-push-i32(field.offset)
+                              bc-op(#addr-add)
+                              out-stars-c = field.stars-final + 'stars(1)
+                              out-stars-bc = field.stars-final + 'stars(1)
+                              return field.type-final
+                           }
+                        }
+                        'c1.stdout{expr-base ": Member field not found\n"}
+                        'c.exit(#failure)
                      }
                      case #index {
                         index'expr-index = e-base
@@ -693,6 +733,8 @@ struct 'expr[info'line-info., type'expr-type] {
                      'c.exit(#failure)
                   }
                } else {
+                  bc-zero()
+                  bc-op(#push-mem-ptr)
                   out-stars-c = stars
                   out-stars-bc = stars
                   return gvar-type
@@ -1075,6 +1117,24 @@ struct 'expr[info'line-info., type'expr-type] {
                   return des-type
                }
             }
+            if (&&, src-stars-c != #0, des-stars-c != #0) {
+               // Object-pointer casts do not change the runtime address.
+               out-stars-c = des-stars-c
+               out-stars-bc = des-stars-c
+               return des-type
+            }
+            if (&&, src-stars-c == #0, src-type.is-integer(), des-stars-c != #0) {
+               bc-int-convert(target-size-type())
+               out-stars-c = des-stars-c
+               out-stars-bc = des-stars-c
+               return des-type
+            }
+            if (&&, src-stars-c != #0, des-stars-c == #0, des-type.is-integer()) {
+               bc-int-convert(des-type)
+               out-stars-c = #0
+               out-stars-bc = #0
+               return des-type
+            }
             if (||, src-type != des-type, src-stars-c != des-stars-c) {
                'c1.stdout{expr-base ": Unsupported cast\n"}
                'c.exit(#failure)
@@ -1112,7 +1172,8 @@ struct 'expr[info'line-info., type'expr-type] {
                            'c.exit(#failure)
                         }
                         if expr.op == #set {
-                           scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                           scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                              type, #0, expr-base.info)
                         } else {
                            bc-arithmetic-compound(expr.op, type, type2, expr-base.info)
                         }
@@ -1143,10 +1204,8 @@ struct 'expr[info'line-info., type'expr-type] {
                      }
                      bc-zero()
                      type2' = expr.src.output(stars2-c?, stars2-bc?)
-                     if (||, type2 != type, stars2-c != stars-c) {
-                        'c1.stdout{expr-base ": Type mismatch\n"}
-                        'c.exit(#failure)
-                     }
+                     scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                        type, stars-c, expr-base.info)
                      bc-op(#set-mem-ptr)
                      out-stars-c = stars-c
                      out-stars-bc = stars-c
@@ -1198,7 +1257,8 @@ struct 'expr[info'line-info., type'expr-type] {
                               'c.exit(#failure)
                            }
                            if expr.op == #set {
-                              scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                              scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                                 type, #0, expr-base.info)
                            } else {
                               bc-arithmetic-compound(expr.op, type, type2, expr-base.info)
                            }
@@ -1211,8 +1271,20 @@ struct 'expr[info'line-info., type'expr-type] {
                            'c.exit(#failure)
                         }
                      } else {
-                        'c1.stdout{expr-base ": Not yet implemented #9542\n"}
-                        'c.exit(#failure)
+                        if expr.op != #set {
+                           'c1.stdout{expr-base ": Invalid assignment type\n"}
+                           'c.exit(#failure)
+                        }
+                        bc-op(#gvar-push)
+                        bc-n32(var-idx)
+                        bc-zero()
+                        type2' = expr.src.output(stars2-c?, stars2-bc?)
+                        scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                           type, stars, expr-base.info)
+                        bc-op(#set-mem-ptr)
+                        out-stars-c = stars
+                        out-stars-bc = stars
+                        return type
                      }
                   } else {
                      lvar' = .lvar-v[var-idx]
@@ -1268,7 +1340,8 @@ struct 'expr[info'line-info., type'expr-type] {
                               'c.exit(#failure)
                            }
                            if expr.op == #set {
-                              scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                              scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                                 type, #0, expr-base.info)
                            } else {
                               bc-arithmetic-compound(expr.op, type, type2, expr-base.info)
                            }
@@ -1282,10 +1355,8 @@ struct 'expr[info'line-info., type'expr-type] {
                            'c.exit(#failure)
                         }
                         type2' = expr.src.output(stars2-c?, stars2-bc?)
-                        if (||, type2 != type, stars2-c != stars) {
-                           'c1.stdout{expr-base ": Type mismatch\n"}
-                           'c.exit(#failure)
-                        }
+                        scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                           type, stars, expr-base.info)
                         bc-op(#set-mem-ptr)
                         out-stars-c = stars
                         out-stars-bc = stars
@@ -1331,7 +1402,8 @@ struct 'expr[info'line-info., type'expr-type] {
                         } elif type.is-arithmetic() {
                            if expr.op == #set {
                               type2' = expr.src.output(stars2-c?, stars2-bc?)
-                              scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                              scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                                 type, #0, expr-base.info)
                            } else {
                               bc-op(#lvar-push)
                               bc-n16(var-idx)
@@ -1355,10 +1427,8 @@ struct 'expr[info'line-info., type'expr-type] {
                         switch expr.op {
                            case #set {
                               type2' = expr.src.output(stars2-c?, stars2-bc?)
-                              if (||, type2 != type, stars2-c != stars) {
-                                 'c1.stdout{expr-base ": Type mismatch\n"}
-                                 'c.exit(#failure)
-                              }
+                              scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                                 type, stars, expr-base.info)
                               bc-op(#lvar-set)
                               bc-n16(var-idx)
                               out-stars-c = stars
@@ -1418,7 +1488,8 @@ struct 'expr[info'line-info., type'expr-type] {
                               'c.exit(#failure)
                            }
                            if expr.op == #set {
-                              scalar-convert-assignment(type, stars-c, field-type, #0, expr-base.info)
+                              scalar-convert-assignment(type, stars-c, expr-is-zero(expr.src),
+                                 field-type, #0, expr-base.info)
                            } else {
                               bc-arithmetic-compound(expr.op, field-type, type, expr-base.info)
                            }
@@ -1442,6 +1513,19 @@ struct 'expr[info'line-info., type'expr-type] {
                            bc-op(#copy-mem)
                            out-stars-c = #0
                            out-stars-bc = #1
+                           return field-type
+                        }
+                        if field-stars != #0 {
+                           if expr.op != #set {
+                              'c1.stdout{expr-base ": Invalid assignment type\n"}
+                              'c.exit(#failure)
+                           }
+                           type' = expr.src.output(stars-c?, stars-bc?)
+                           scalar-convert-assignment(type, stars-c, expr-is-zero(expr.src),
+                              field-type, field-stars, expr-base.info)
+                           bc-op(#set-mem-ptr)
+                           out-stars-c = field-stars
+                           out-stars-bc = field-stars
                            return field-type
                         }
                         'c1.stdout{expr-base ": Field assignment is not supported for this type\n"}
@@ -1471,7 +1555,8 @@ struct 'expr[info'line-info., type'expr-type] {
                            'c.exit(#failure)
                         }
                         if expr.op == #set {
-                           scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                           scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                              type, #0, expr-base.info)
                         } else {
                            bc-arithmetic-compound(expr.op, type, type2, expr-base.info)
                         }
@@ -1502,10 +1587,8 @@ struct 'expr[info'line-info., type'expr-type] {
                      }
                      bc-zero()
                      type2' = expr.src.output(stars2-c?, stars2-bc?)
-                     if (||, type2 != type, stars2-c != stars-c) {
-                        'c1.stdout{expr-base ": Type mismatch\n"}
-                        'c.exit(#failure)
-                     }
+                     scalar-convert-assignment(type2, stars2-c, expr-is-zero(expr.src),
+                        type, stars-c, expr-base.info)
                      bc-op(#set-mem-ptr)
                      out-stars-c = stars-c
                      out-stars-bc = stars-c
@@ -1668,7 +1751,19 @@ struct 'expr[info'line-info., type'expr-type] {
                'c.exit(#failure)
             }
             if comparison {
-               if (||, type1 != type2, stars1-c != stars2-c) {
+               pointers-compatible'bool = (&&,
+                  stars1-c == stars2-c, stars1-c != #0, type1 == type2)
+               if (&&, (||, expr.op == #eq, expr.op == #ne),
+                  (||,
+                     (&&, stars1-c == #1, type1.kind == #void, stars2-c != #0),
+                     (&&, stars2-c == #1, type2.kind == #void, stars1-c != #0),
+                     (&&, stars1-c != #0, stars2-c == #0,
+                        type2.is-integer(), expr-is-zero(expr.op2)),
+                     (&&, stars2-c != #0, stars1-c == #0,
+                        type1.is-integer(), expr-is-zero(expr.op1)))) {
+                  pointers-compatible = true
+               }
+               if !pointers-compatible {
                   'c1.stdout{expr-base ": Type mismatch for pointer comparison\n"}
                   'c.exit(#failure)
                }
