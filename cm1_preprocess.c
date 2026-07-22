@@ -30,6 +30,7 @@ char output_mem[OUTPUT_LIMIT];
 #define PP_MACRO_STORAGE_LIMIT (INPUT_LIMIT / 8u)
 #define PP_MACRO_LIMIT 2048u
 #define PP_EXPANSION_LIMIT 64u
+#define PP_MACRO_ARGUMENT_LIMIT 128u
 #define PP_INCLUDE_DEPTH_LIMIT 64u
 #define PP_CONDITION_LIMIT 128u
 #define PP_LINE_LIMIT (64u * 1024u)
@@ -51,6 +52,14 @@ struct pp_sink {
    size_t limit;
 };
 
+struct pp_macro_text {
+   const char* text;
+   size_t length;
+   const struct pp_macro_text* parameters;
+   const struct pp_macro_text* arguments;
+   size_t parameter_count;
+};
+
 struct pp_condition {
    bool parent_active;
    bool active;
@@ -66,6 +75,11 @@ struct pp_expr {
 };
 
 static struct pp_macro pp_macros[PP_MACRO_LIMIT];
+static struct pp_macro_text
+   pp_macro_parameter_mem[PP_EXPANSION_LIMIT][PP_MACRO_ARGUMENT_LIMIT];
+static struct pp_macro_text
+   pp_macro_argument_mem[PP_EXPANSION_LIMIT][PP_MACRO_ARGUMENT_LIMIT];
+static char pp_macro_expansion_mem[PP_EXPANSION_LIMIT][PP_LINE_LIMIT];
 static size_t pp_macro_count;
 static size_t pp_macro_mem_pos;
 static size_t pp_file_mem_pos;
@@ -133,6 +147,23 @@ static void pp_error_missing_include(
    );
    pp_error_append(include_name, strlen(include_name));
    pp_error_append("' was not found\n", sizeof("' was not found\n") - 1u);
+}
+
+static void pp_error_variadic_macro(
+   const char* path, size_t line, const char* name, size_t name_length
+) {
+   if (pp_error_length != 0) return;
+   pp_error_append(path, strlen(path));
+   pp_error_append(":", 1);
+   pp_error_append_size(line);
+   pp_error_append(
+      ": error: variadic macro '",
+      sizeof(": error: variadic macro '") - 1u
+   );
+   pp_error_append(name, name_length);
+   pp_error_append(
+      "' is not supported\n", sizeof("' is not supported\n") - 1u
+   );
 }
 
 const char* preprocess_error_message(void) {
@@ -310,13 +341,181 @@ static bool pp_is_string_prefix(const char* text, size_t length) {
       || (length == 2 && text[0] == 'u' && text[1] == '8');
 }
 
+static bool pp_macro_signature(
+   const struct pp_macro* macro,
+   struct pp_macro_text* parameters,
+   size_t* parameter_count,
+   const char** replacement,
+   size_t* replacement_length
+) {
+   const char* text = input_mem + macro->value_offset;
+   size_t length = macro->value_length;
+   size_t pos;
+   size_t count = 0;
+
+   if (length == 0 || text[0] != '(') {
+      pp_fail();
+      return false;
+   }
+   pos = pp_skip_space(text, length, 1u);
+   if (pos < length && text[pos] == ')') {
+      pos++;
+   } else {
+      for (;;) {
+         size_t begin;
+         size_t end;
+         if (pos == length || !pp_is_ident_start(text[pos])
+            || count == PP_MACRO_ARGUMENT_LIMIT) {
+            pp_fail();
+            return false;
+         }
+         begin = pos++;
+         while (pos < length && pp_is_ident(text[pos])) pos++;
+         end = pos;
+         for (size_t i = 0; i < count; i++) {
+            if (pp_text_equal(
+               text + begin, end - begin,
+               parameters[i].text, parameters[i].length
+            )) {
+               pp_fail();
+               return false;
+            }
+         }
+         parameters[count].text = text + begin;
+         parameters[count].length = end - begin;
+         parameters[count].parameters = NULL;
+         parameters[count].arguments = NULL;
+         parameters[count].parameter_count = 0;
+         count++;
+         pos = pp_skip_space(text, length, pos);
+         if (pos < length && text[pos] == ',') {
+            pos = pp_skip_space(text, length, pos + 1u);
+            continue;
+         }
+         if (pos < length && text[pos] == ')') {
+            pos++;
+            break;
+         }
+         pp_fail();
+         return false;
+      }
+   }
+   pos = pp_skip_space(text, length, pos);
+   *parameter_count = count;
+   *replacement = text + pos;
+   *replacement_length = length - pos;
+   return true;
+}
+
+static bool pp_macro_arguments(
+   const char* text,
+   size_t length,
+   size_t open_pos,
+   size_t expected_count,
+   const struct pp_macro_text* enclosing_parameters,
+   const struct pp_macro_text* enclosing_arguments,
+   size_t enclosing_parameter_count,
+   struct pp_macro_text* arguments,
+   size_t* argument_count,
+   size_t* end_pos
+) {
+   size_t pos = open_pos + 1u;
+   size_t begin = pos;
+   size_t count = 0;
+   size_t depth = 1;
+   bool saw_comma = false;
+
+   while (pos < length) {
+      char c = text[pos];
+      if (c == '"' || c == '\'') {
+         char quote = c;
+         pos++;
+         while (pos < length) {
+            c = text[pos++];
+            if (c == '\\' && pos < length) pos++;
+            else if (c == quote) break;
+         }
+         continue;
+      }
+      if (c == '(') {
+         depth++;
+         pos++;
+         continue;
+      }
+      if (c == ')') {
+         depth--;
+         if (depth == 0) {
+            size_t argument_begin = pp_skip_space(text, pos, begin);
+            size_t argument_end = pp_trim_end(text, argument_begin, pos);
+            if (saw_comma || argument_begin != argument_end
+               || expected_count != 0) {
+               if (count == PP_MACRO_ARGUMENT_LIMIT) {
+                  pp_fail();
+                  return false;
+               }
+               arguments[count].text = text + argument_begin;
+               arguments[count].length = argument_end - argument_begin;
+               arguments[count].parameters = enclosing_parameters;
+               arguments[count].arguments = enclosing_arguments;
+               arguments[count].parameter_count =
+                  enclosing_parameter_count;
+               count++;
+            }
+            *argument_count = count;
+            *end_pos = pos + 1u;
+            return true;
+         }
+         pos++;
+         continue;
+      }
+      if (c == ',' && depth == 1) {
+         size_t argument_begin = pp_skip_space(text, pos, begin);
+         size_t argument_end = pp_trim_end(text, argument_begin, pos);
+         if (count == PP_MACRO_ARGUMENT_LIMIT) {
+            pp_fail();
+            return false;
+         }
+         arguments[count].text = text + argument_begin;
+         arguments[count].length = argument_end - argument_begin;
+         arguments[count].parameters = enclosing_parameters;
+         arguments[count].arguments = enclosing_arguments;
+         arguments[count].parameter_count = enclosing_parameter_count;
+         count++;
+         saw_comma = true;
+         pos++;
+         begin = pos;
+         continue;
+      }
+      pos++;
+   }
+   pp_fail();
+   return false;
+}
+
+static ptrdiff_t pp_macro_parameter(
+   const struct pp_macro_text* parameters,
+   size_t parameter_count,
+   const char* name,
+   size_t name_length
+) {
+   for (size_t i = 0; i < parameter_count; i++) {
+      if (pp_text_equal(
+         name, name_length, parameters[i].text, parameters[i].length
+      )) return (ptrdiff_t)i;
+   }
+   return -1;
+}
+
 static bool pp_expand_text(
    const char* text,
    size_t length,
    struct pp_sink* sink,
    size_t* expansion_stack,
    size_t stack_length,
-   bool preserve_defined
+   bool preserve_defined,
+   const struct pp_macro_text* parameters,
+   const struct pp_macro_text* arguments,
+   size_t parameter_count
 ) {
    size_t pos = 0;
 
@@ -369,6 +568,28 @@ static bool pp_expand_text(
          ptrdiff_t macro_index;
          while (pos < length && pp_is_ident(text[pos])) pos++;
 
+         if (parameters != NULL) {
+            ptrdiff_t parameter_index = pp_macro_parameter(
+               parameters, parameter_count, text + begin, pos - begin
+            );
+            if (parameter_index >= 0) {
+               const struct pp_macro_text* argument =
+                  &arguments[parameter_index];
+               if (!pp_expand_text(
+                  argument->text,
+                  argument->length,
+                  sink,
+                  expansion_stack,
+                  stack_length,
+                  preserve_defined,
+                  argument->parameters,
+                  argument->arguments,
+                  argument->parameter_count
+               )) return false;
+               continue;
+            }
+         }
+
          if (pos < length && (text[pos] == '"' || text[pos] == '\'')
             && pp_is_string_prefix(text + begin, pos - begin)) {
             if (!pp_sink_write(sink, text + begin, pos - begin)) return false;
@@ -402,7 +623,6 @@ static bool pp_expand_text(
 
          macro_index = pp_find_macro(text + begin, pos - begin);
          if (macro_index >= 0 && pp_macros[macro_index].defined
-            && !pp_macros[macro_index].function_like
             && !pp_macro_on_stack(
                (size_t)macro_index, expansion_stack, stack_length
             )) {
@@ -411,15 +631,105 @@ static bool pp_expand_text(
                pp_fail();
                return false;
             }
-            expansion_stack[stack_length] = (size_t)macro_index;
-            if (!pp_expand_text(
-               input_mem + macro->value_offset,
-               macro->value_length,
-               sink,
-               expansion_stack,
-               stack_length + 1u,
-               preserve_defined
-            )) return false;
+            if (macro->function_like) {
+               size_t call_pos = pp_skip_space(text, length, pos);
+               if (call_pos < length && text[call_pos] == '(') {
+                  struct pp_macro_text* macro_parameters =
+                     pp_macro_parameter_mem[stack_length];
+                  struct pp_macro_text* macro_arguments =
+                     pp_macro_argument_mem[stack_length];
+                  const char* replacement;
+                  size_t replacement_length;
+                  size_t macro_parameter_count;
+                  size_t macro_argument_count;
+                  size_t call_end;
+                  if (!pp_macro_signature(
+                     macro,
+                     macro_parameters,
+                     &macro_parameter_count,
+                     &replacement,
+                     &replacement_length
+                  )) return false;
+                  if (!pp_macro_arguments(
+                     text,
+                     length,
+                     call_pos,
+                     macro_parameter_count,
+                     parameters,
+                     arguments,
+                     parameter_count,
+                     macro_arguments,
+                     &macro_argument_count,
+                     &call_end
+                  )) return false;
+                  if (macro_argument_count != macro_parameter_count) {
+                     pp_fail();
+                     return false;
+                  }
+                  {
+                     struct pp_sink argument_sink = {
+                        pp_macro_expansion_mem[stack_length],
+                        0,
+                        PP_LINE_LIMIT - 1u
+                     };
+                     /* Function arguments are expanded before the invoked
+                      * macro itself is disabled. Reserve this depth with a
+                      * sentinel so nested calls use the next scratch level. */
+                     expansion_stack[stack_length] = (size_t)-1;
+                     for (size_t i = 0; i < macro_argument_count; i++) {
+                        struct pp_macro_text raw_argument = macro_arguments[i];
+                        size_t argument_begin = argument_sink.length;
+                        if (!pp_expand_text(
+                           raw_argument.text,
+                           raw_argument.length,
+                           &argument_sink,
+                           expansion_stack,
+                           stack_length + 1u,
+                           preserve_defined,
+                           raw_argument.parameters,
+                           raw_argument.arguments,
+                           raw_argument.parameter_count
+                        )) return false;
+                        macro_arguments[i].text = argument_sink.data
+                           + argument_begin;
+                        macro_arguments[i].length = argument_sink.length
+                           - argument_begin;
+                        macro_arguments[i].parameters = NULL;
+                        macro_arguments[i].arguments = NULL;
+                        macro_arguments[i].parameter_count = 0;
+                     }
+                  }
+                  expansion_stack[stack_length] = (size_t)macro_index;
+                  pos = call_end;
+                  if (!pp_expand_text(
+                     replacement,
+                     replacement_length,
+                     sink,
+                     expansion_stack,
+                     stack_length + 1u,
+                     preserve_defined,
+                     macro_parameters,
+                     macro_arguments,
+                     macro_parameter_count
+                  )) return false;
+                  continue;
+               }
+            } else {
+               expansion_stack[stack_length] = (size_t)macro_index;
+               if (!pp_expand_text(
+                  input_mem + macro->value_offset,
+                  macro->value_length,
+                  sink,
+                  expansion_stack,
+                  stack_length + 1u,
+                  preserve_defined,
+                  NULL,
+                  NULL,
+                  0
+               )) return false;
+               continue;
+            }
+            if (!pp_sink_write(sink, text + begin, pos - begin)) return false;
          } else if (!pp_sink_write(sink, text + begin, pos - begin)) {
             return false;
          }
@@ -440,7 +750,7 @@ static bool pp_expand_to_output(const char* text, size_t length) {
       OUTPUT_LIMIT > 0 ? OUTPUT_LIMIT - 1u : 0u
    };
    bool result = pp_expand_text(
-      text, length, &sink, expansion_stack, 0, false
+      text, length, &sink, expansion_stack, 0, false, NULL, NULL, 0
    );
    pp_output_pos = sink.length;
    return result;
@@ -749,7 +1059,7 @@ static bool pp_evaluate_condition(const char* text, size_t length) {
    int64_t value;
 
    if (!pp_expand_text(
-      text, length, &sink, expansion_stack, 0, true
+      text, length, &sink, expansion_stack, 0, true, NULL, NULL, 0
    )) return false;
    expanded[sink.length] = '\0';
    expr.text = expanded;
@@ -881,7 +1191,7 @@ static bool pp_process_include(
    if (pos < length && (text[pos] == '"' || text[pos] == '<')) {
       if (!pp_sink_write(&sink, text, length)) return false;
    } else if (!pp_expand_text(
-      text, length, &sink, expansion_stack, 0, false
+      text, length, &sink, expansion_stack, 0, false, NULL, NULL, 0
    )) return false;
    expanded[sink.length] = '\0';
    pos = pp_skip_space(expanded, sink.length, 0);
@@ -1128,6 +1438,25 @@ static bool pp_process_line(
       name_end = name_begin + 1u;
       while (name_end < length && pp_is_ident(line[name_end])) name_end++;
       function_like = name_end < length && line[name_end] == '(';
+      if (function_like) {
+         size_t parameter_pos = name_end + 1u;
+         while (parameter_pos < length && line[parameter_pos] != ')') {
+            if (parameter_pos + 2u < length
+               && line[parameter_pos] == '.'
+               && line[parameter_pos + 1u] == '.'
+               && line[parameter_pos + 2u] == '.') {
+               pp_error_variadic_macro(
+                  current_path,
+                  source_line,
+                  line + name_begin,
+                  name_end - name_begin
+               );
+               pp_fail();
+               return false;
+            }
+            parameter_pos++;
+         }
+      }
       value_begin = pp_skip_space(line, length, name_end);
       value_end = pp_trim_end(line, value_begin, length);
       if (!pp_set_macro(
@@ -1377,10 +1706,11 @@ static bool pp_process_fd(int fd, const char* path, size_t depth) {
  * GCC-style line markers preserve source paths and line numbers across nested
  * includes.
  *
- * The supported macro form is an object-like macro. Function-like #defines
- * are remembered for defined()/#ifdef, but their invocations are left
- * unchanged. On an I/O, syntax, nesting, or fixed-buffer-limit error, this
- * function returns zero and clears output_mem.
+ * Object-like and function-like macros are recursively expanded. Function
+ * macros support ordinary parameter substitution; stringizing (#), token
+ * pasting (##), and variadic parameters are not supported. On an I/O, syntax,
+ * nesting, or fixed-buffer-limit error, this function returns zero and clears
+ * output_mem.
  */
 size_t preprocess(
    const char* input_path,
