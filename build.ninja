@@ -9,10 +9,10 @@ rule cp1
  command = cp1-compile -I out -c $out $in
 
 rule c
- command = clang -ggdb -I. -Iout -o $out -c $in
+ command = clang -Wno-pointer-sign -Wno-incompatible-pointer-types -Wno-incompatible-pointer-types-discards-qualifiers -ggdb -I. -Iout -o $out -c $in
 
 rule ld
- command = clang -ggdb -o $out $in && strip $out
+ command = clang -Wno-pointer-sign -ggdb -o $out $in && strip $out
 
 rule re2c
  command = re2c --input-encoding utf8 --utf8 $in -o $out
@@ -33,7 +33,7 @@ rule file-to-h
 #  command = clang -MMD -MF $out.d -E $in > $out
 
 rule emcc
- command = emcc $in $flags -o $out -I. -Iout -Wno-incompatible-pointer-types
+ command = emcc -Wno-pointer-sign $in $flags -o $out -I. -Iout -Wno-incompatible-pointer-types
 
 build out/cm1.cp1.c: cp1 cm1-standalone.cp1 cm1.cp1 expr.cp1 print-error.cp1 space.cp1 func.cp1 | out/tokens.cp1
 build out/cm1.cp1.c.o: c out/cm1.cp1.c | out/cm1.c.h out/cm1.h.h cm1_preprocess.c

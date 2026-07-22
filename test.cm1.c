@@ -1,6 +1,9 @@
 #include "test2.cm1.c"
 #include <stdio.h>
 
+#define CLITERAL(t) (t)
+#define RAYWHITE CLITERAL(1)
+
 struct z {
    int e;
    int a;
@@ -197,5 +200,6 @@ int main() {
    cm1_init("out/test.cm1");
    run();
    printf("zgvar.q = %d\n", zgvar[0].e);
+   int k = RAYWHITE;
    return 0;
 }

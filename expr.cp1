@@ -232,7 +232,7 @@ expr-f64(value'f64, li'line-info)'expr {
    expr.value = value
    return expr
 }
-expr-from-num(num'u32)'expr @decl('<# num>)
+expr-from-num(num'u32)'expr @decl('<# (void*)num>)
 struct 'expr-field[base'expr., obj'expr, field-name'id, array-dim-start'u32, array-dim-c'u32, array-size'u32, arrow'bool]
 expr-field(obj'expr, arrow'bool, field-name'id)'expr {
    expr'expr-field = expr-alloc('expr-field['usz], #field, obj.info)
