@@ -257,6 +257,7 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    f32_num = (decimal_float | hex_float) [fF];
    f64_num = decimal_float | hex_float;
    string_literal = ["] ([^"\000\n\\] | [\\] [^\000\n])* ["];
+   character_literal = ['] ([^'\000\n\\] | [\\] [^\000\n])+ ['];
 
    c_signed_int =
       kw_int
@@ -351,6 +352,7 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
 
    *                                { string_mem[0] = l->start[0]; l->cursor = cursor; return CM1_TOKEN_END; }
    string_literal                   { l->cursor = cursor; return CM1_TOKEN_STRING; }
+   character_literal                { l->cursor = cursor; return CM1_TOKEN_I32; }
    "const"                          { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 3; }
    "static"                         { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 4; }
    "inline"                         { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 5; }

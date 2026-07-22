@@ -414,27 +414,38 @@ parse(in-path'char @const[]) {
          }
          case #i32 {
             str' = lex.start
-            num'u32 = 0
-            base'u32 = 10
-            start' = 0
-            if (&&, str[0] == ''0, (||, str[1] == ''x, str[1] == ''X)) {
-               base = 16
-               start = 2
-            }
-            loop i' = start; ; i++ {
-               c' = str[i]
-               digit'u32 = 16
-               if (&&, c >= ''0, c <= ''9) {
-                  digit = c - ''0
-               } elif (&&, c >= ''a, c <= ''f) {
-                  digit = (c - ''a) + 10
-               } elif (&&, c >= ''A, c <= ''F) {
-                  digit = (c - ''A) + 10
+            if str[0] == 39 {
+               char-start'rdr. = ?
+               char-start.ref = lex.start
+               char-end'rdr. = ?
+               char-end.ref = lex.cursor
+               li'line-info. = ?
+               li.init(.input-path, tok.i32.row, tok.i32.col)
+               tok.i32.id = cm1-char-literal-value(
+                  str, 'u32(char-end.pos - char-start.pos), li)
+            } else {
+               num'u32 = 0
+               base'u32 = 10
+               start' = 0
+               if (&&, str[0] == ''0, (||, str[1] == ''x, str[1] == ''X)) {
+                  base = 16
+                  start = 2
                }
-               if digit >= base { break }
-               num = (num * base) + digit
+               loop i' = start; ; i++ {
+                  c' = str[i]
+                  digit'u32 = 16
+                  if (&&, c >= ''0, c <= ''9) {
+                     digit = c - ''0
+                  } elif (&&, c >= ''a, c <= ''f) {
+                     digit = (c - ''a) + 10
+                  } elif (&&, c >= ''A, c <= ''F) {
+                     digit = (c - ''A) + 10
+                  }
+                  if digit >= base { break }
+                  num = (num * base) + digit
+               }
+               tok.i32.id = num
             }
-            tok.i32.id = num
             .last-token = t
             psr.parse(t, tok)
          }
@@ -1455,6 +1466,84 @@ cm1-string-hex-value(c'char)'i32 {
    if (&&, c >= ''a, c <= ''f) { return (c - ''a) + 10 }
    if (&&, c >= ''A, c <= ''F) { return (c - ''A) + 10 }
    return -1
+}
+cm1-char-literal-error(li'line-info, message'char @const[]) {
+   'c1.stdout{li ": " message "\n"}
+   'c.exit(#failure)
+}
+cm1-char-literal-value(raw'char @const[], raw-len'u32, li'line-info)'i32 {
+   if (||, raw-len < 3, raw[0] != 'char(39), raw[raw-len - 1] != 'char(39)) {
+      cm1-char-literal-error(li, "Invalid character literal")
+   }
+   value'u32 = 0
+   char-c'u32 = 0
+   end' = raw-len - 1
+   loop i' = 1; i < end; {
+      c'u32 = 'u8(raw[i++])
+      if c == 92 {
+         if i == end {
+            cm1-char-literal-error(li, "Incomplete escape sequence in character literal")
+         }
+         escaped'u8 = 'u8(raw[i++])
+         if escaped == ''a {
+            c = 7
+         } elif escaped == ''b {
+            c = 8
+         } elif escaped == ''f {
+            c = 12
+         } elif escaped == ''n {
+            c = 10
+         } elif escaped == ''r {
+            c = 13
+         } elif escaped == ''t {
+            c = 9
+         } elif escaped == ''v {
+            c = 11
+         } elif (||, escaped == 34, escaped == 39, escaped == 63, escaped == 92) {
+            c = escaped
+         } elif (&&, escaped >= ''0, escaped <= ''7) {
+            c = escaped - ''0
+            digit-c' = 1
+            loop (&&, digit-c < 3, i < end) {
+               digit'u8 = 'u8(raw[i])
+               if (||, digit < ''0, digit > ''7) { break }
+               c = (c * 8) + (digit - ''0)
+               digit-c++
+               i++
+            }
+            if c > 255 {
+               cm1-char-literal-error(li, "Octal escape is too large for a character")
+            }
+         } elif escaped == ''x {
+            c = 0
+            digit-c' = 0
+            loop i < end {
+               digit' = cm1-string-hex-value(raw[i])
+               if digit < 0 { break }
+               if c > ((255 - digit) / 16) {
+                  cm1-char-literal-error(li, "Hexadecimal escape is too large for a character")
+               }
+               c = (c * 16) + digit
+               digit-c++
+               i++
+            }
+            if digit-c == 0 {
+               cm1-char-literal-error(li, "Hexadecimal escape requires at least one digit")
+            }
+         } else {
+            cm1-char-literal-error(li, "Unsupported escape sequence in character literal")
+         }
+      }
+      value = (value << 8) | c
+      char-c++
+   }
+   if char-c == 0 {
+      cm1-char-literal-error(li, "Empty character literal")
+   }
+   if (&&, char-c == 1, char-is-signed(), (value & 0x80) != 0) {
+      value |= 0xffffff00
+   }
+   return 'i32(value)
 }
 cm1-string-intern-candidate(start'u32, pos'u32, li'line-info, out-len'u32&)'u32 {
    len' = pos - start
