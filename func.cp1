@@ -141,6 +141,23 @@ func-code-bc(space'space) {
    }
    bc-n16(0xffff) // No more structs and arrays
    .func = func
+   // Scalars whose addresses escape use byte-addressable frame storage.
+   // Preserve incoming argument values while freshly declared locals start
+   // with the same zero value used by ordinary Cm1 local initialization.
+   loop i' = 0; .lvar-c; i++ {
+      lvar' = .lvar-v[i]
+      if lvar.address-taken {
+         if (&&, lvar.array-dim-c == 0,
+            (||, lvar.stars-final != #0, !lvar.type-final.is-aggregate())) {
+            size-mode'u8 = 'u8(type-storage-size(
+               lvar.type-final, lvar.stars-final, lvar.info))
+            if i < func.arg-c { size-mode = size-mode | 0x80 }
+            bc-op(#lvar-spill)
+            bc-n16(i)
+            bc-n8(size-mode)
+         }
+      }
+   }
    space.output()
    stmt-goto-resolve()
    bc-op(#return)

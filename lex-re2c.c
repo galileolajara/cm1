@@ -353,6 +353,7 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    string_literal                   { l->cursor = cursor; return CM1_TOKEN_STRING; }
    "const"                          { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 3; }
    "static"                         { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 4; }
+   "inline"                         { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 5; }
    "# " [^\000\n]+                  {
       l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 2;
    }

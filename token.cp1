@@ -64,6 +64,7 @@ main(arg-c'cint, arg-v'char[][])'cint {
       '= #line-info,
       '= #const,
       '= #static,
+      '= #inline,
       '= ]'cint {
       '= cp1-name(e'this)'char[] @cp1-name
       '= }

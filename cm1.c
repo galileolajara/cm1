@@ -41,6 +41,8 @@
 #define CM1_OP_LVAR_INC_DEC_FLOAT  40
 #define CM1_OP_MEM_INC_DEC_FLOAT   41
 #define CM1_OP_PUSH_STRING         42
+#define CM1_OP_LVAR_SPILL          43
+#define CM1_OP_MEM_INC_DEC_PTR     44
 
 #define CM1_TYPE_I8  1
 #define CM1_TYPE_U8  2
@@ -349,6 +351,19 @@ void cm1_run(uint16_t func_idx) {
                cm1_stack_v[cm1_lvar_pos + var_idx];
             break;
          }
+         case CM1_OP_LVAR_SPILL: {
+            uint16_t var_idx = *((uint16_t*)bc);
+            bc += sizeof(uint16_t);
+            uint8_t size_mode = *(bc++);
+            size_t size = size_mode & 0x7f;
+            union cm1_stack_item old_value =
+               cm1_stack_v[cm1_lvar_pos + var_idx];
+            uint8_t* storage = (uint8_t*)&cm1_stack_v[cm1_stack_pos++];
+            memset(storage, 0, sizeof(union cm1_stack_item));
+            if (size_mode & 0x80) memcpy(storage, &old_value, size);
+            cm1_stack_v[cm1_lvar_pos + var_idx].ptr = storage;
+            break;
+         }
          case CM1_OP_LVAR_SET: {
             uint16_t var_idx = *((uint16_t*)bc);
             bc += sizeof(uint16_t);
@@ -502,6 +517,18 @@ void cm1_run(uint16_t func_idx) {
                (mode & 1) ? old_val + 1 : old_val - 1, kind);
             cm1_store_int(addr + offset, new_val, kind);
             cm1_push_u((mode & 2) ? new_val : old_val);
+            break;
+         }
+         case CM1_OP_MEM_INC_DEC_PTR: {
+            uint8_t mode = *(bc++);
+            size_t element_size = cm1_pop_usz();
+            ssize_t offset = cm1_pop_isz();
+            uint8_t* addr = cm1_pop_ptr();
+            uint8_t* old_value = *(void**)(addr + offset);
+            uint8_t* new_value = (mode & 1)
+               ? old_value + element_size : old_value - element_size;
+            *(void**)(addr + offset) = new_value;
+            cm1_push_ptr((mode & 2) ? new_value : old_value);
             break;
          }
          case CM1_OP_ADDR_ADD: {

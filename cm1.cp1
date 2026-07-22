@@ -77,6 +77,8 @@ enum 'op[
 #lvar-inc-dec-float,
 #mem-inc-dec-float,
 #push-string,
+#lvar-spill,
+#mem-inc-dec-ptr,
 ]'u8 {
    cp1-name(e'this)'char @const[] @cp1-name
 }

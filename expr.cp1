@@ -254,6 +254,10 @@ expr-unary(e'expr, op'unary-op)'expr {
    expr'expr-unary = expr-alloc('expr-unary['usz], #unary, e.info)
    expr.expr = e
    expr.op = op
+   if (&&, e != null, op == #amp, e.type == #var) {
+      var'expr-var = e
+      if !var.global { .lvar-v[var.var-idx].address-taken = true }
+   }
    return expr
 }
 struct 'expr-inc-dec[base'expr., expr'expr, increment'bool, prefix'bool]
@@ -525,11 +529,32 @@ struct 'expr[info'line-info., type'expr-type] {
                case #amp {
                   switch e-base.type {
                      case #var {
-                        type' = e-base.output(stars-c?, stars-bc?)
-                        if (&&, stars-c == #0, type.is-aggregate()) {
-                           out-stars-c = #1
-                           out-stars-bc = #1
-                           return type
+                        var'expr-var = e-base
+                        if var.global {
+                           gvar' = .gvar-v[var.var-idx]
+                           if gvar.array-dim-c != 0 {
+                              'c1.stdout{expr-base ": Taking the address of an array is not supported\n"}
+                              'c.exit(#failure)
+                           }
+                           bc-op(#gvar-push)
+                           bc-n32(var.var-idx)
+                           out-stars-c = gvar.stars-final + 'stars(1)
+                           out-stars-bc = gvar.stars-final + 'stars(1)
+                           return gvar.type-final
+                        } else {
+                           lvar' = .lvar-v[var.var-idx]
+                           if lvar.array-dim-c != 0 {
+                              'c1.stdout{expr-base ": Taking the address of an array is not supported\n"}
+                              'c.exit(#failure)
+                           }
+                           // Address-taken scalars are spilled at function
+                           // entry, while aggregates already store a pointer
+                           // to their byte-addressable frame storage.
+                           bc-op(#lvar-push)
+                           bc-n16(var.var-idx)
+                           out-stars-c = lvar.stars-final + 'stars(1)
+                           out-stars-bc = lvar.stars-final + 'stars(1)
+                           return lvar.type-final
                         }
                      }
                      case #index {
@@ -681,6 +706,26 @@ struct 'expr[info'line-info., type'expr-type] {
                   out-stars-c = lvar.stars-final + 'stars(1)
                   out-stars-bc = lvar.stars-final + 'stars(1)
                   return lvar-type
+               } elif (&&, lvar.address-taken,
+                  (||, lvar.stars-final != #0, !lvar-type.is-aggregate())) {
+                  bc-op(#lvar-push)
+                  bc-n16(var-idx)
+                  bc-zero()
+                  if lvar.stars-final == #0 {
+                     if lvar-type.is-arithmetic() {
+                        bc-push-mem-arithmetic(lvar-type)
+                        out-stars-c = #0
+                        out-stars-bc = #0
+                        return lvar-type
+                     }
+                  } else {
+                     bc-op(#push-mem-ptr)
+                     out-stars-c = lvar.stars-final
+                     out-stars-bc = lvar.stars-final
+                     return lvar-type
+                  }
+                  'c1.stdout{expr-base ": Address-taken local has an unsupported type\n"}
+                  'c.exit(#failure)
                } elif lvar.stars-final == #0 {
                   if lvar-type.is-aggregate() {
                      bc-op(#lvar-push)
@@ -845,7 +890,62 @@ struct 'expr[info'line-info., type'expr-type] {
                   } else {
                      lvar' = .lvar-v[var-idx]
                      type' = lvar.type-final
-                     if (||, lvar.array-dim-c != 0, lvar.stars-final != #0, !type.is-arithmetic()) {
+                     if lvar.array-dim-c != 0 {
+                        'c1.stdout{expr-base ": Increment and decrement require a modifiable arithmetic lvalue\n"}
+                        'c.exit(#failure)
+                     }
+                     if lvar.address-taken {
+                        bc-op(#lvar-push)
+                        bc-n16(var-idx)
+                        bc-zero()
+                        if lvar.stars-final != #0 {
+                           element-size' = type-storage-size(
+                              type, lvar.stars-final - 'stars(1), expr-base.info)
+                           bc-push-usz(element-size)
+                           bc-op(#mem-inc-dec-ptr)
+                           bc-n8(mode)
+                           out-stars-c = lvar.stars-final
+                           out-stars-bc = lvar.stars-final
+                           return type
+                        }
+                        if !type.is-arithmetic() {
+                           'c1.stdout{expr-base ": Increment and decrement require a modifiable arithmetic lvalue\n"}
+                           'c.exit(#failure)
+                        }
+                        if type.is-integer() {
+                           bc-op(#mem-inc-dec-int)
+                        } else {
+                           bc-op(#mem-inc-dec-float)
+                        }
+                        bc-inc-dec-arg(mode, type)
+                        out-stars-c = #0
+                        out-stars-bc = #0
+                        return type
+                     }
+                     if lvar.stars-final != #0 {
+                        element-size' = type-storage-size(
+                           type, lvar.stars-final - 'stars(1), expr-base.info)
+                        if !expr.prefix {
+                           // Preserve the old pointer as the postfix result.
+                           bc-op(#lvar-push)
+                           bc-n16(var-idx)
+                        }
+                        bc-op(#lvar-push)
+                        bc-n16(var-idx)
+                        bc-push-usz(element-size)
+                        if expr.increment {
+                           bc-op(#addr-add)
+                        } else {
+                           bc-op(#addr-sub)
+                        }
+                        bc-op(#lvar-set)
+                        bc-n16(var-idx)
+                        if !expr.prefix { bc-op(#pop) }
+                        out-stars-c = lvar.stars-final
+                        out-stars-bc = lvar.stars-final
+                        return type
+                     }
+                     if !type.is-arithmetic() {
                         'c1.stdout{expr-base ": Increment and decrement require a modifiable arithmetic lvalue\n"}
                         'c.exit(#failure)
                      }
@@ -987,6 +1087,74 @@ struct 'expr[info'line-info., type'expr-type] {
             expr'expr-assign = expr-base
             des-base' = expr.des
             switch des-base.type {
+               case #unary {
+                  des'expr-unary = des-base
+                  if des.op != #star {
+                     'c1.stdout{expr-base ": Assignment requires a modifiable lvalue\n"}
+                     'c.exit(#failure)
+                  }
+                  type' = des.expr.output(stars-c?, stars-bc?)
+                  if stars-c == #0 {
+                     'c1.stdout{expr-base ": Cannot assign through a non-pointer expression\n"}
+                     'c.exit(#failure)
+                  }
+                  stars-c--
+                  if stars-c == #0 {
+                     if type.is-arithmetic() {
+                        bc-zero()
+                        if expr.op != #set {
+                           bc-op(#dup-pair)
+                           bc-push-mem-arithmetic(type)
+                        }
+                        type2' = expr.src.output(stars2-c?, stars2-bc?)
+                        if stars2-c != #0 {
+                           'c1.stdout{expr-base ": Arithmetic assignment requires an arithmetic value\n"}
+                           'c.exit(#failure)
+                        }
+                        if expr.op == #set {
+                           scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                        } else {
+                           bc-arithmetic-compound(expr.op, type, type2, expr-base.info)
+                        }
+                        bc-set-mem-arithmetic(type)
+                        out-stars-c = #0
+                        out-stars-bc = #0
+                        return type
+                     } elif type.is-aggregate() {
+                        if expr.op != #set {
+                           'c1.stdout{expr-base ": Invalid assignment type\n"}
+                           'c.exit(#failure)
+                        }
+                        type2' = expr.src.output(stars2-c?, stars2-bc?)
+                        if (||, type2 != type, stars2-c != #0) {
+                           'c1.stdout{expr-base ": Type mismatch\n"}
+                           'c.exit(#failure)
+                        }
+                        bc-push-usz(type.size)
+                        bc-op(#copy-mem)
+                        out-stars-c = #0
+                        out-stars-bc = #1
+                        return type
+                     }
+                  } else {
+                     if expr.op != #set {
+                        'c1.stdout{expr-base ": Invalid assignment type\n"}
+                        'c.exit(#failure)
+                     }
+                     bc-zero()
+                     type2' = expr.src.output(stars2-c?, stars2-bc?)
+                     if (||, type2 != type, stars2-c != stars-c) {
+                        'c1.stdout{expr-base ": Type mismatch\n"}
+                        'c.exit(#failure)
+                     }
+                     bc-op(#set-mem-ptr)
+                     out-stars-c = stars-c
+                     out-stars-bc = stars-c
+                     return type
+                  }
+                  'c1.stdout{expr-base ": Dereferenced value cannot be assigned\n"}
+                  'c.exit(#failure)
+               }
                case #var {
                   des'expr-var = des-base
                   var-idx' = des.var-idx
@@ -1061,10 +1229,70 @@ struct 'expr[info'line-info., type'expr-type] {
                         'c1.stdout{expr-base ": Arrays are not assignable\n"}
                         'c.exit(#failure)
                      }
+                     type' = lvar.type-final
+                     stars' = lvar.stars-final
+                     if (&&, lvar.address-taken,
+                        (||, stars != #0, !type.is-aggregate())) {
+                        bc-op(#lvar-push)
+                        bc-n16(var-idx)
+                        bc-zero()
+                        if expr.src == null {
+                           bc-op(#push-zero)
+                           if stars == #0 {
+                              if !type.is-arithmetic() {
+                                 'c1.stdout{expr-base ": Address-taken local has an unsupported type\n"}
+                                 'c.exit(#failure)
+                              }
+                              bc-set-mem-arithmetic(type)
+                              out-stars-c = #0
+                              out-stars-bc = #0
+                           } else {
+                              bc-op(#set-mem-ptr)
+                              out-stars-c = stars
+                              out-stars-bc = stars
+                           }
+                           return type
+                        }
+                        if stars == #0 {
+                           if !type.is-arithmetic() {
+                              'c1.stdout{expr-base ": Address-taken local has an unsupported type\n"}
+                              'c.exit(#failure)
+                           }
+                           if expr.op != #set {
+                              bc-op(#dup-pair)
+                              bc-push-mem-arithmetic(type)
+                           }
+                           type2' = expr.src.output(stars2-c?, stars2-bc?)
+                           if stars2-c != #0 {
+                              'c1.stdout{expr-base ": Arithmetic assignment requires an arithmetic value\n"}
+                              'c.exit(#failure)
+                           }
+                           if expr.op == #set {
+                              scalar-convert-assignment(type2, stars2-c, type, #0, expr-base.info)
+                           } else {
+                              bc-arithmetic-compound(expr.op, type, type2, expr-base.info)
+                           }
+                           bc-set-mem-arithmetic(type)
+                           out-stars-c = #0
+                           out-stars-bc = #0
+                           return type
+                        }
+                        if expr.op != #set {
+                           'c1.stdout{expr-base ": Invalid assignment type\n"}
+                           'c.exit(#failure)
+                        }
+                        type2' = expr.src.output(stars2-c?, stars2-bc?)
+                        if (||, type2 != type, stars2-c != stars) {
+                           'c1.stdout{expr-base ": Type mismatch\n"}
+                           'c.exit(#failure)
+                        }
+                        bc-op(#set-mem-ptr)
+                        out-stars-c = stars
+                        out-stars-bc = stars
+                        return type
+                     }
                      if expr.src == null {
                         // Initialize variable to zero
-                        type' = lvar.type-final
-                        stars' = lvar.stars-final
                         if (&&, stars == #0, type.is-aggregate()) {
                            bc-op(#lvar-push)
                            bc-n16(var-idx)
@@ -1082,8 +1310,6 @@ struct 'expr[info'line-info., type'expr-type] {
                            return type
                         }
                      }
-                     type' = lvar.type-final
-                     stars' = lvar.stars-final
                      if stars == #0 {
                         if type.is-aggregate() {
                            if expr.op != #set {

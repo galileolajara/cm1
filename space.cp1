@@ -404,7 +404,7 @@ space-begin()'space {
    return space
 }
 #lvar-limit = 1024 * 256
-struct 'lvar[info'line-info., type-src'type, type-final'type, stars-src'stars, stars-final'stars, array-dim-start'u32, array-dim-c'u32, array-size'u32]
+struct 'lvar[info'line-info., type-src'type, type-final'type, stars-src'stars, stars-final'stars, array-dim-start'u32, array-dim-c'u32, array-size'u32, address-taken'bool]
 lvar-v'lvar.[#lvar-limit]
 lvar-c'u16
 lvar-name-id-v'id[#lvar-limit]
