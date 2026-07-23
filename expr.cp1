@@ -1793,8 +1793,11 @@ struct 'expr[info'line-info., type'expr-type] {
                out-stars-bc = #0
                return .type-v[5]
             }
-            // Pointer address calculations retain the existing bytecode path.
             if (&&, stars1-c != #0, stars2-c == #0, type2.is-integer()) {
+               element-size' = type-storage-size(
+                  type1, stars1-c - 'stars(1), expr-base.info)
+               bc-push-i32(element-size)
+               bc-int-binary(#mul, target-size-type())
                if expr.op == #add {
                   bc-op(#addr-add)
                   out-stars-c = stars1-c

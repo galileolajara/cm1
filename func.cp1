@@ -129,7 +129,7 @@ func-code-bc(space'space) {
    }
    bc-n8(0xff)
    // Initialize the stack memory of aggregates and arrays
-   loop i' = func.arg-c; .lvar-c - func.arg-c; i++ {
+   loop i'u16 = func.arg-c; .lvar-c - func.arg-c; i++ {
       lvar' = .lvar-v[i]
       type' = lvar.type-final
       if lvar.array-dim-c != 0 {
