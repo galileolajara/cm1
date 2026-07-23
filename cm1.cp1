@@ -608,7 +608,7 @@ bc-push-u32(val'i32) {
       bc-n8(val)
    } elif val < 65536 {
       bc-op(#push-u16)
-      bc-n32(val)
+      bc-n16(val)
    } else {
       bc-op(#push-u32)
       bc-n32(val)
@@ -622,7 +622,7 @@ bc-push-u64(val'u64) {
       bc-n8(val)
    } elif val < 65536 {
       bc-op(#push-u16)
-      bc-n32(val)
+      bc-n16(val)
    } elif val < 4294967296u64 {
       bc-op(#push-u32)
       bc-n32(val)
