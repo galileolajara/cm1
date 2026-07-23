@@ -23,13 +23,6 @@ void* io_mem() {
    write(fd,
       STR_WITH_SIZE(
       "C\n"
-      "cm1_printf_begin\n"
-      "cm1_printf_s\n"
-      "cm1_printf_d\n"
-      "cm1_printf_x\n"
-      "cm1_printf_f\n"
-      "cm1_printf_c\n"
-      "cm1_printf_end\n"
       )
    );
    close(fd);
@@ -41,7 +34,7 @@ void* io_mem() {
 EMSCRIPTEN_KEEPALIVE
 int32_t compile(int32_t input_size) {
    int fd = open(CM1_SRC_PATH, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-   write(fd, include_stdio_h, include_stdio_h_len);
+   // write(fd, include_stdio_h, include_stdio_h_len);
    write(fd,
 		STR_WITH_SIZE(
 		"void run();\n"

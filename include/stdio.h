@@ -1,21 +1,32 @@
+##include <stdio.h>
+
+#ifndef __EMSCRIPTEN__
+##if 0
+typedef struct __sFILE FILE;
+FILE *stdout;
+##endif
+
+extern int fflush(FILE *stream);
+#endif
+
 int cm1_printf_begin() {
    return 0;
 }
-int cm1_printf_s(int n, char* fmt, char* s) {
+int cm1_printf_s(int n, const char *fmt, const char *s) {
    return n + printf(fmt, s);
 }
-int cm1_printf_x(int n, char* fmt, int x) {
-   return n + printf(fmt, x);
+int cm1_printf_c(int n, const char *fmt, int s) {
+   return n + printf(fmt, s);
 }
-int cm1_printf_c(int n, char* fmt, int c) {
-   return n + printf(fmt, c);
+int cm1_printf_d(int n, const char *fmt, int s) {
+   return n + printf(fmt, s);
 }
-int cm1_printf_d(int n, char* fmt, int val) {
-   return n + printf(fmt, val);
+int cm1_printf_x(int n, const char *fmt, int s) {
+   return n + printf(fmt, s);
 }
-int cm1_printf_f(int n, char* fmt, double val) {
-   return n + printf(fmt, val);
+int cm1_printf_f(int n, const char *fmt, double s) {
+   return n + printf(fmt, s);
 }
-int cm1_printf_end(int n, char* str) {
-   return n + printf("%s", str);
+int cm1_printf_end(int n, const char *s) {
+   return n + printf("%s", s);
 }

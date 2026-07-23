@@ -173,6 +173,8 @@ func-code-bc(space'space) {
 }
 func-name'id
 func-is-bytecode'bool
+func-name-prefix-u32(str'char @const[])'u32
+   @decl("# (((const struct __attribute__((packed, may_alias)) { uint32_t value; }*)(str))->value)")
 func-is-bytecode(str'char @const[], len'usz)'bool {
    func-name' = id-get(str, len)
    .func-name = func-name
@@ -181,6 +183,12 @@ func-is-bytecode(str'char @const[], len'usz)'bool {
          .func-is-bytecode = true
          return true
       } else {
+         .func-is-bytecode = false
+         return false
+      }
+   }
+   if len >= 5 {
+      if func-name-prefix-u32(str) == 0x5f316d63 { // Make functions that begin with cm1_ to be non-interpreted
          .func-is-bytecode = false
          return false
       }

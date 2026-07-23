@@ -218,18 +218,66 @@ include "cm1_preprocess.c" {
    preprocess(in-path'char @const[], include-c'usz, include-v'char @const[][], define-c'usz, define-name-v'char @const[][], define-value-v'char @const[][])'usz @no-decl(preprocess)
    preprocess-error-message()'char @const[] @no-decl(preprocess_error_message)
 }
+#include-limit = 64
+include-v'char[#include-limit][]
+include-c'u8
+#define-limit = 128
+define-name-v'char[#define-limit][]
+define-value-v'char[#define-limit][]
+define-c'u8
+#define-arg-byte-limit = 64 * 1024
+define-arg-mem'char[#define-arg-byte-limit]
+define-arg-pos'u32
+command-line-define(spec'char @const[]) {
+   spec-len'u32 = 'u32('c.strlen(spec))
+   name-len' = spec-len
+   loop i' = 0; spec-len; i++ {
+      if spec[i] == ''= {
+         name-len = i
+         break
+      }
+   }
+   valid' = name-len != 0
+   loop i' = 0; name-len; i++ {
+      c'char = spec[i]
+      char-valid' = ?
+      if i == 0 {
+         char-valid = (||, (&&, c >= ''a, c <= ''z),
+            (&&, c >= ''A, c <= ''Z), c == ''_)
+      } else {
+         char-valid = (||, (&&, c >= ''a, c <= ''z),
+            (&&, c >= ''A, c <= ''Z),
+            (&&, c >= ''0, c <= ''9), c == ''_)
+      }
+      if !char-valid { valid = false }
+   }
+   if !valid {
+      'c1.stdout{"Invalid -D macro name: " spec "\n"}
+      'c.exit(#failure)
+   }
+   if .define-c == #define-limit {
+      'c1.stdout{"Too many -D arguments; limit is " #define-limit - 3 "\n"}
+      'c.exit(#failure)
+   }
+   if (name-len + 1) > (#define-arg-byte-limit - .define-arg-pos) {
+      'c1.stdout{"The total size of -D macro names exceeds " #define-arg-byte-limit " bytes\n"}
+      'c.exit(#failure)
+   }
+   name'char[] = &.define-arg-mem[.define-arg-pos]
+   'c.memcpy(name, spec, name-len)
+   name[name-len] = ''\0
+   .define-arg-pos += name-len + 1
+   d' = .define-c++
+   .define-name-v[d] = name
+   if name-len < spec-len {
+      .define-value-v[d] = &spec[name-len + 1]
+   } else {
+      .define-value-v[d] = "1"
+   }
+}
+include-path()'char @const[]
 parse(in-path'char @const[]) {
-   include-v'char[1][]
-   include-v[0] = "include"
-   define-name-v'char[3][]
-   define-name-v[0] = "__CM1__"
-   define-name-v[1] = "__STDC__"
-   define-name-v[2] = "__STDC_VERSION__"
-   define-value-v'char[3][]
-   define-value-v[0] = ""
-   define-value-v[1] = ""
-   define-value-v[2] = "199901"
-   in-size' = preprocess(in-path, 1, include-v, 3, define-name-v, define-value-v)
+   in-size' = preprocess(in-path, .include-c, .include-v, .define-c, .define-name-v, .define-value-v)
    if in-size == 0 {
       'c1.stdout{preprocess-error-message()}
       'c.exit(#failure)
@@ -1885,9 +1933,12 @@ clear-memory-parser()
 clear-memory() {
    clear-memory-lexer()
    clear-memory-parser()
+   .include-c = 0
+   .define-c = 0
+   .define-arg-pos = 0
    // Clear only the prefixes used by the previous compilation. Some entries
    // contain pointers or flags which are not overwritten on every allocation.
-   id-c' = 'u32(.id-c)
+   // id-c' = 'u32(.id-c)
    // 'c.memset(.id-soa.crc32c, 0, id-c * 'u32['usz]) // No need to clear this
    // 'c.memset(.id-soa.ptr, 0, id-c * 'ref['usz]) // No need to clear this
    // 'c.memset(.id-soa.len, 0, id-c * 'u8['usz]) // No need to clear this
@@ -2008,10 +2059,11 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
       export()
    }
 
-   if arg-c != 5 {
-      'c1.stdout{"Usage: " arg-v[0] " <input-file.cm1.c> <input-file.cm1.cfg> <output-file.c> <output-file.cm1>\n"}
+   if arg-c < 5 {
+      'c1.stdout{"Usage: " arg-v[0] " <input-file.cm1.c> <input-file.cm1.cfg> <output-file.c> <output-file.cm1> [-I path|-Ipath] [-D name[=value]|-Dname[=value]]...\n"}
       'c.exit(#failure)
    }
+
    in-path' = arg-v[1]
    cfg-path' = arg-v[2]
    out-path' = arg-v[3]
@@ -2022,6 +2074,7 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
       'c1.stdout{"Cannot read file: " cfg-path "\n"}
       'c.exit(#failure)
    }
+
    cfg-len' = fd.seek(0, #end)
    fd.seek(0, #set)
    cfg-data'char[] = cfg-mem(cfg-len)
@@ -2057,6 +2110,61 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
    }
    "cfg_func_list_end:;"
    .cfg-func-list = .id-c
+
+   .define-name-v[0] = "__CM1__"
+   .define-name-v[1] = "__STDC__"
+   .define-name-v[2] = "__STDC_VERSION__"
+   .define-value-v[0] = "1"
+   .define-value-v[1] = "1"
+   .define-value-v[2] = "199901"
+   .define-c = 3
+   platform-defines()
+   .define-arg-pos = 0
+
+   // Read -I and -D arguments
+   // Syntax should be one of the following:
+   // -I folder
+   // -Ifolder
+   // -D key
+   // -Dkey
+   // -D key=value
+   // -Dkey=value
+   loop arg-i' = 5; arg-i < arg-c; {
+      arg' = arg-v[arg-i++]
+      if (&&, arg[0] == ''-, arg[1] == ''I) {
+         path'char @const[] = &arg[2]
+         if arg[2] == ''\0 {
+            if arg-i == arg-c {
+               'c1.stdout{"Missing include path after -I\n"}
+               'c.exit(#failure)
+            }
+            path = arg-v[arg-i++]
+         }
+         if path[0] == ''\0 {
+            'c1.stdout{"The -I include path cannot be empty\n"}
+            'c.exit(#failure)
+         }
+         // Keep one entry available for Cm1's built-in include directory.
+         if .include-c == (#include-limit - 1) {
+            'c1.stdout{"Too many -I arguments; limit is " #include-limit - 1 "\n"}
+            'c.exit(#failure)
+         }
+         .include-v[.include-c++] = path
+      } elif (&&, arg[0] == ''-, arg[1] == ''D) {
+         spec'char @const[] = &arg[2]
+         if arg[2] == ''\0 {
+            if arg-i == arg-c {
+               'c1.stdout{"Missing macro definition after -D\n"}
+               'c.exit(#failure)
+            }
+            spec = arg-v[arg-i++]
+         }
+         command-line-define(spec)
+      } else {
+         'c1.stdout{"Unknown argument: " arg "\n"}
+         'c.exit(#failure)
+      }
+   }
 
    if true {
       type' = .type-v[.type-c++]
@@ -2137,6 +2245,10 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
    .id-printf = id-get("printf", 6)
 
    .cm1-bytecode-wtr.ref = .cm1-bytecode.buf
+
+   // Built-in include folder is the least prioritized when searching
+   compute-include-path(arg-v[0])
+   .include-v[.include-c++] = .include-dir
    parse(in-path)
 
    if true { // Write C file

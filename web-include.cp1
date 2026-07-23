@@ -1,0 +1,11 @@
+'c = 'libc
+include-dir'char[4096]
+include-dir-len'u16
+compute-include-path(bin'char @const[]) {
+   .include-dir-len = 'c.sprintf(.include-dir, "include")
+}
+platform-defines() {
+   'cm1.define-name-v['cm1.define-c] = "__EMSCRIPTEN__"
+   'cm1.define-value-v['cm1.define-c] = "1"
+   'cm1.define-c++
+}

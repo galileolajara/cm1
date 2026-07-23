@@ -1,0 +1,93 @@
+'c = 'libc
+'x = 'posix
+'c1 = 'libcp1
+include-dir'char[4096]
+include-dir-len'u16
+compute-include-path(bin'char @const[]) {
+   abs-path' = .include-dir // :char[512]
+   abs-path-len'u16 = 0
+   if bin[0] == ''/ {
+      abs-path-len = 'c.strlen(bin)
+      'c.memcpy(abs-path, bin, abs-path-len)
+      abs-path[abs-path-len] = ''\0
+   } else {
+      has-slash' = false
+      loop i' = 0; ; i++ {
+         if bin[i] == ''\0 { break }
+         if bin[i] == ''/ {
+            has-slash = true
+            break
+         }
+      }
+      if has-slash {
+         "#ifdef _WIN32"
+         cwd'char[1024]
+         'x.getcwd(cwd, 1024)
+         'c.strcpy(abs-path, &cwd[2])
+         i' = 0
+         loop ; ; i++ {
+            if abs-path[i] == ''\0 {
+               break
+            } elif abs-path[i] == ''\\ {
+               abs-path[i] = ''/
+            }
+         }
+         abs-path[i++] = ''/
+         'c.strcpy(&abs-path[i], bin)
+         "#else"
+         'c.realpath(bin, abs-path)
+         "#endif"
+      } else {
+         path' = 'c.strdup('c.getenv("PATH"))
+         found'
+         "#ifdef _WIN32"
+         loop i' = 0; path[i] != ''\0; i++ {
+            if path[i] == ''\\ {
+               path[i] = ''/
+            }
+         }
+         found = 'c.strtok(path, ";")
+         "#else"
+         found = 'c.strtok(path, ":")
+         "#endif"
+         fd' = 'x'fd#nil
+         loop found != null {
+            'c1.sprintf(abs-path, f?)
+            "#ifdef _WIN32"
+            f.f{found ''/ bin ".exe"}
+            "#else"
+            f.f{found ''/ bin}
+            "#endif"
+            fd = 'x.open(abs-path, #rdonly)
+            if fd != #nil {
+               fd.close()
+               break
+            }
+            "#ifdef _WIN32"
+            found = 'c.strtok(null, ";")
+            "#else"
+            found = 'c.strtok(null, ":")
+            "#endif"
+         }
+         if fd == #nil {
+            'c1.stdout{"Cannot run " bin " because we can't detect its absolute path\n"}
+            'c.exit(#failure)
+         }
+         'c.free(path)
+      }
+   }
+   slash1' = 'c.strrchr(abs-path, ''/)
+   slash1[0] = ''\0
+   slash2' = 'c.strrchr(abs-path, ''/)
+   slash2[1] = ''i
+   slash2[2] = ''n
+   slash2[3] = ''c
+   slash2[4] = ''l
+   slash2[5] = ''u
+   slash2[6] = ''d
+   slash2[7] = ''e
+   slash2[8] = ''\0
+   .include-dir-len = 'c.strlen(.include-dir)
+}
+platform-defines() {
+}

@@ -183,6 +183,10 @@ void cm1_init(const char* cm1_path) {
    #else
    int fd = open(cm1_path, O_RDONLY);
    #endif
+   if (fd == -1) {
+      printf("Cannot open file for reading: %s\n", cm1_path);
+      exit(EXIT_FAILURE);
+   }
    size_t size = lseek(fd, 0, SEEK_END) - 4; // Minus 4 for the crc32c
    // printf("loading cm1 bytecode: %s (%zu bytes)\n", cm1_path, size);
    lseek(fd, 4, SEEK_SET); // Skip the crc32c
