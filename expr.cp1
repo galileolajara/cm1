@@ -6,6 +6,12 @@ using 'cm1 {
 expr-call-stack-v'expr[#expr-call-stack-depth-limit][#expr-call-arg-limit]
 expr-call-stack-c'u8[#expr-call-stack-depth-limit]
 expr-call-stack-depth'u8
+#expr-initializer-stack-depth-limit = 32
+#expr-initializer-item-limit = 4096
+expr-initializer-stack-start-v'u16[#expr-initializer-stack-depth-limit]
+expr-initializer-stack-depth'u8
+expr-initializer-item-v'expr[#expr-initializer-item-limit]
+expr-initializer-item-c'u16
 expr-call-begin() {
    depth' = .expr-call-stack-depth++
    .expr-call-stack-c[depth] = 0
@@ -13,6 +19,21 @@ expr-call-begin() {
 expr-call-arg(expr'expr) {
    depth' = .expr-call-stack-depth - 1
    .expr-call-stack-v[depth][.expr-call-stack-c[depth]++] = expr
+}
+expr-initializer-begin(li'line-info) {
+   if .expr-initializer-stack-depth == #expr-initializer-stack-depth-limit {
+      'c1.stdout{li ": Initializer lists are nested too deeply\n"}
+      'c.exit(#failure)
+   }
+   .expr-initializer-stack-start-v[.expr-initializer-stack-depth++] =
+      .expr-initializer-item-c
+}
+expr-initializer-arg(expr'expr) {
+   if .expr-initializer-item-c == #expr-initializer-item-limit {
+      'c1.stdout{expr.info ": Too many expressions in initializer lists\n"}
+      'c.exit(#failure)
+   }
+   .expr-initializer-item-v[.expr-initializer-item-c++] = expr
 }
 expr-i32(i32'i32, li'line-info)'expr {
    expr'expr-i32 = expr-alloc('expr-i32['usz], #i32, li)
@@ -44,7 +65,7 @@ expr-alloc(size'usz, type'expr-type, li'line-info)'ref {
    expr.type = type
    return r.ref
 }
-enum 'expr-type[#none, #call, #i32, #u32, #i64, #u64, #assign, #math, #unary, #var, #field, #index, #inc-dec, #size-align, #cast, #logical, #f32, #f64, #conditional, #string]'u8 {
+enum 'expr-type[#none, #call, #i32, #u32, #i64, #u64, #assign, #math, #unary, #var, #field, #index, #inc-dec, #size-align, #cast, #logical, #f32, #f64, #conditional, #string, #initializer]'u8 {
    cp1-name(e'this)'char @const[] @cp1-name
 }
 expr-call-fixed(func-name'id, arg-v'expr[], arg-c'u8, li'line-info)'expr {
@@ -81,6 +102,96 @@ struct 'expr-i32[base'expr., i32'i32]
 struct 'expr-u32[base'expr., u32'u32]
 struct 'expr-i64[base'expr., i64'i64]
 struct 'expr-u64[base'expr., u64'u64]
+struct 'expr-initializer[base'expr., var-idx'u16, assignment-c'u16, assignment-v'expr[1]]
+expr-var-index(var-idx'u16, li'line-info)'expr {
+   expr'expr-var = expr-alloc('expr-var['usz], #var, li)
+   expr.var-idx = var-idx
+   return expr
+}
+expr-initializer-final(type'type, stars'stars, array-dim-c'u32, li'line-info)'expr {
+   depth' = .expr-initializer-stack-depth -= 1
+   start' = .expr-initializer-stack-start-v[depth]
+   item-c' = .expr-initializer-item-c - start
+   .expr-initializer-item-c = start
+   item-v'expr[] = &.expr-initializer-item-v[start]
+
+   final-type' = type.final-type(stars, final-stars')
+   if array-dim-c != 0 {
+      if (||, item-c == 0, (&&, item-c == 1, expr-is-zero(item-v[0]))) {
+         return expr-from-num(1)
+      }
+      'c1.stdout{li ": Array initializer lists currently support only {} or {0}\n"}
+      'c.exit(#failure)
+   }
+   if (||, final-stars != #0, !final-type.is-aggregate()) {
+      if item-c == 0 {
+         return expr-i32(0, li)
+      }
+      if item-c == 1 {
+         return item-v[0]
+      }
+      'c1.stdout{li ": A scalar initializer list must contain only one expression\n"}
+      'c.exit(#failure)
+   }
+   if final-type.field-v == null {
+      'c1.stdout{li ": Struct or union '" final-type.name "' was used but it was never defined.\n"}
+      'c.exit(#failure)
+   }
+   // The conventional {0} initializer means zero-initialize the whole
+   // struct or union, including when its first field is itself a struct.
+   if (&&, item-c == 1, expr-is-zero(item-v[0])) {
+      item-c = 0
+   }
+   max-item-c'u16 = 0
+   if final-type.kind == #union {
+      if final-type.field-c != 0 {
+         max-item-c = 1
+      }
+   } else {
+      loop i' = 0; final-type.field-c; i++ {
+         field' = final-type.field-v[i]
+         // Empty structs and unions occupy no storage and therefore do not
+         // consume a value in Cm1's flat positional initializer lists.
+         if (&&, field.array-dim-c == 0, field.stars-final == #0,
+            field.type-final.is-aggregate(), field.type-final.size == 0) {
+            continue
+         }
+         max-item-c++
+      }
+   }
+   if item-c > max-item-c {
+      'c1.stdout{li ": Too many expressions in initializer for struct or union '" final-type.name "'\n"}
+      'c.exit(#failure)
+   }
+
+   var-idx' = space-lvar-anonymous(type, stars, li)
+   expr'expr-initializer = expr-alloc(
+      ('expr-initializer['usz] - 'usz['usz]) + ('usz['usz] * item-c),
+      #initializer, li)
+   expr.var-idx = var-idx
+   expr.assignment-c = item-c
+   field-idx'u16 = 0
+   loop i' = 0; item-c; i++ {
+      if final-type.kind != #union {
+         loop {
+            field' = final-type.field-v[field-idx]
+            if (&&, field.array-dim-c == 0, field.stars-final == #0,
+               field.type-final.is-aggregate(), field.type-final.size == 0) {
+               field-idx++
+               continue
+            }
+            break
+         }
+      }
+      var-expr' = expr-var-index(var-idx, li)
+      field-expr' = expr-field(var-expr, false, final-type.field-v[field-idx].name)
+      expr.assignment-v[i] = expr-assign(field-expr, #set, item-v[i])
+      if final-type.kind != #union {
+         field-idx++
+      }
+   }
+   return expr
+}
 // String expressions live outside cm1-data-mem so their bytecode operands can
 // be patched after the final string-pool position is known.
 #string-limit = 1024 * 1024
@@ -577,6 +688,25 @@ struct 'expr[info'line-info., type'expr-type] {
             out-stars-c = #1
             out-stars-bc = #1
             return .type-v[11]
+         }
+         case #initializer {
+            expr'expr-initializer = expr-base
+            lvar' = .lvar-v[expr.var-idx]
+            type' = lvar.type-final
+            bc-op(#lvar-push)
+            bc-n16(expr.var-idx)
+            bc-push-usz(type.size)
+            bc-op(#zero-mem)
+            bc-op(#pop)
+            loop i' = 0; expr.assignment-c; i++ {
+               expr.assignment-v[i].output(stars-c?, stars-bc?)
+               bc-op(#pop)
+            }
+            bc-op(#lvar-push)
+            bc-n16(expr.var-idx)
+            out-stars-c = #0
+            out-stars-bc = #1
+            return type
          }
          case #f32 {
             expr'expr-f32 = expr-base

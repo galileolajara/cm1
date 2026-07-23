@@ -344,16 +344,12 @@ lvar_declarator_first ::= type(t) ID(i) array_dims(a) ASSIGN expr(e).
    _Tcm1_Fdeclarator_lvar_6((size_t)t.ptr.ptr2, i.basic.id, ARRAY_DIM_V(a), ARRAY_DIM_C(a), e.ptr.ptr, PATH(i));
    ARRAY_DIM_POP(a);
 }
-lvar_declarator_first ::= type(t) ID(i) array_dims(a) ASSIGN OPEN_CURLY_BRACE CLOSE_CURLY_BRACE.
+lvar_declarator_first ::= type(t) ID(i) array_dims(a) ASSIGN initializer.
 {
+   void *src = _Tcm1_Fexpr_initializer_final_4(
+      t.ptr.ptr, (size_t)t.ptr.ptr2, ARRAY_DIM_C(a), PATH(i));
    _Tcm1_Fdeclarator_begin_2(t.ptr.ptr, (size_t)t.ptr.ptr3 == 1);
-   _Tcm1_Fdeclarator_lvar_6((size_t)t.ptr.ptr2, i.basic.id, ARRAY_DIM_V(a), ARRAY_DIM_C(a), (void*)1, PATH(i));
-   ARRAY_DIM_POP(a);
-}
-lvar_declarator_first ::= type(t) ID(i) array_dims(a) ASSIGN OPEN_CURLY_BRACE ZERO CLOSE_CURLY_BRACE.
-{
-   _Tcm1_Fdeclarator_begin_2(t.ptr.ptr, (size_t)t.ptr.ptr3 == 1);
-   _Tcm1_Fdeclarator_lvar_6((size_t)t.ptr.ptr2, i.basic.id, ARRAY_DIM_V(a), ARRAY_DIM_C(a), (void*)1, PATH(i));
+   _Tcm1_Fdeclarator_lvar_6((size_t)t.ptr.ptr2, i.basic.id, ARRAY_DIM_V(a), ARRAY_DIM_C(a), src, PATH(i));
    ARRAY_DIM_POP(a);
 }
 lvar_declarator ::= COMMA stars_for_ids(s) ID(i) array_dims(a).
@@ -366,19 +362,27 @@ lvar_declarator ::= COMMA stars_for_ids(s) ID(i) array_dims(a) ASSIGN expr(e).
    _Tcm1_Fdeclarator_lvar_6(s.basic.id, i.basic.id, ARRAY_DIM_V(a), ARRAY_DIM_C(a), e.ptr.ptr, PATH(i));
    ARRAY_DIM_POP(a);
 }
-lvar_declarator ::= COMMA stars_for_ids(s) ID(i) array_dims(a) ASSIGN OPEN_CURLY_BRACE CLOSE_CURLY_BRACE.
+lvar_declarator ::= COMMA stars_for_ids(s) ID(i) array_dims(a) ASSIGN initializer.
 {
-   _Tcm1_Fdeclarator_lvar_6(s.basic.id, i.basic.id, ARRAY_DIM_V(a), ARRAY_DIM_C(a), (void*)1, PATH(i));
-   ARRAY_DIM_POP(a);
-}
-lvar_declarator ::= COMMA stars_for_ids(s) ID(i) array_dims(a) ASSIGN OPEN_CURLY_BRACE ZERO CLOSE_CURLY_BRACE.
-{
-   _Tcm1_Fdeclarator_lvar_6(s.basic.id, i.basic.id, ARRAY_DIM_V(a), ARRAY_DIM_C(a), (void*)1, PATH(i));
+   void *src = _Tcm1_Fdeclarator_initializer_3(
+      s.basic.id, ARRAY_DIM_C(a), PATH(i));
+   _Tcm1_Fdeclarator_lvar_6(s.basic.id, i.basic.id, ARRAY_DIM_V(a), ARRAY_DIM_C(a), src, PATH(i));
    ARRAY_DIM_POP(a);
 }
 lvar_declarators ::= .
 lvar_declarators ::= lvar_declarators lvar_declarator.
 stmt_var ::= lvar_declarator_first lvar_declarators SEMICOLON.
+
+initializer_begin ::= OPEN_CURLY_BRACE(b).
+{ _Tcm1_Fexpr_initializer_begin_1(PATH(b)); }
+initializer_values ::= expr_assign(e).
+{ _Tcm1_Fexpr_initializer_arg_1(e.ptr.ptr); }
+initializer_values ::= initializer_values COMMA expr_assign(e).
+{ _Tcm1_Fexpr_initializer_arg_1(e.ptr.ptr); }
+initializer_contents ::= .
+initializer_contents ::= initializer_values.
+initializer_contents ::= initializer_values COMMA.
+initializer ::= initializer_begin initializer_contents CLOSE_CURLY_BRACE.
 
 decl_func_args_list ::= rparen_or_curly.
 decl_func_args_list ::= VOID rparen_or_curly.
@@ -814,6 +818,15 @@ expr_single(out) ::= F64_NUM(e).
 { out.ptr.ptr = _Tcm1_Fexpr_f64_2(e.f64.f64, PATH(e)); }
 
 expr_single(out) ::= LPAREN expr(e) RPAREN.
+{ out.ptr.ptr = e.ptr.ptr; }
+
+compound_literal(out) ::= LPAREN type(t) RPAREN initializer.
+{
+   out.ptr.ptr = _Tcm1_Fexpr_initializer_final_4(
+      t.ptr.ptr, (size_t)t.ptr.ptr2, 0, PATH(t));
+}
+
+expr_single(out) ::= compound_literal(e).
 { out.ptr.ptr = e.ptr.ptr; }
 
 postfix_expr(out) ::= expr_single(e).

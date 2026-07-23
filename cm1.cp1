@@ -824,6 +824,9 @@ declarator-field(stars'stars, name'id, array-dims'u32[], array-dim-c'u32, li'lin
 declarator-lvar(stars'stars, name'id, array-dims'u32[], array-dim-c'u32, src'expr, li'line-info) {
    space-lvar(.declarator-type, stars, name, array-dims, array-dim-c, src, li)
 }
+declarator-initializer(stars'stars, array-dim-c'u32, li'line-info)'expr {
+   return expr-initializer-final(.declarator-type, stars, array-dim-c, li)
+}
 current-type'type @real-name(current_type)
 current-stars'stars
 #field-limit = 1024
@@ -1198,6 +1201,10 @@ export() {
    expr-call(#nil, null)
    expr-call-begin()
    expr-call-arg(null)
+   expr-initializer-begin(null)
+   expr-initializer-arg(null)
+   expr-initializer-final(null, #0, 0, null)
+   declarator-initializer(#0, 0, null)
    expr-i32(0, null)
    expr-u32(0, null)
    expr-i64(0, null)
@@ -2038,6 +2045,8 @@ clear-memory() {
    .expr-str-c = 0
    .expr-discard-bytecode-depth = 0
    .expr-call-stack-depth = 0
+   .expr-initializer-stack-depth = 0
+   .expr-initializer-item-c = 0
    .space-c = 0
    .space-stack-c = 0
    .lvar-c = 0

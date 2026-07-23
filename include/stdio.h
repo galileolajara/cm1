@@ -9,6 +9,8 @@ FILE *stdout;
 extern int fflush(FILE *stream);
 #endif
 
+extern void perror(const char *message);
+
 int cm1_printf_begin() {
    return 0;
 }

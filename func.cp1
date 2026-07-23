@@ -79,11 +79,15 @@ func-add(with-code'bool)'func {
    .func-name-v[.func-c] = .func-name
    func' = .func-v[.func-c++]
    func.info.copy-from(.func-info)
-   if .func-is-bytecode {
-      func.cm1 = true
-      func.func-idx = .func-bc-idx++
-   } else {
+   if .func-extern {
       func.func-idx = .func-c-idx++
+   } else {
+      if .func-is-bytecode {
+         func.cm1 = true
+         func.func-idx = .func-bc-idx++
+      } else {
+         func.func-idx = .func-c-idx++
+      }
    }
    func.type-src = .func-type
    func.stars-src = .func-stars

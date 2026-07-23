@@ -64,9 +64,23 @@ void report(char* name) {
    printf("hello %s\n", name);
 }
 
+struct K {
+};
+
+struct Vector3 {
+   struct K k;
+   float x, y, z;
+};
+
+void vector_test(struct Vector3 v) {
+}
+
 struct z test(int x, struct z *j) {
    report("Galileo");
    printf("Lajara %s hello world\n", "galileo");
+   struct Vector3 v = { 1.0f, 2.0f, 3.0f };
+   struct Vector3 vx = { 0 };
+   vector_test((struct Vector3){ 1.0f, 2.0f, 3.0f});
    // (*j).t = 55;
    // hello(k);
    // k = 6;

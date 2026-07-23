@@ -90,6 +90,8 @@ static size_t pp_error_length;
 
 static size_t pp_include_path_count;
 static const char* const* pp_include_path_list;
+static const char* pp_expansion_path;
+static size_t pp_expansion_line;
 
 static bool pp_is_space(char c) {
    return c == ' ' || c == '\t' || c == '\v' || c == '\f' || c == '\r';
@@ -168,6 +170,34 @@ static bool pp_sink_char(struct pp_sink* sink, char c) {
    return pp_sink_write(sink, &c, 1);
 }
 
+static bool pp_sink_size(struct pp_sink* sink, size_t value) {
+   char digits[3u * sizeof(size_t) + 1u];
+   size_t digit_count = 0;
+   do {
+      digits[digit_count++] = (char)('0' + value % 10u);
+      value /= 10u;
+   } while (value != 0);
+   while (digit_count != 0) {
+      if (!pp_sink_char(sink, digits[--digit_count])) return false;
+   }
+   return true;
+}
+
+static bool pp_sink_string_literal(struct pp_sink* sink, const char* text) {
+   if (!pp_sink_char(sink, '"')) return false;
+   while (*text != '\0') {
+      char c = *text++;
+      if (c == '"' || c == '\\') {
+         if (!pp_sink_char(sink, '\\')) return false;
+      } else if (c == '\r' || c == '\n') {
+         pp_fail();
+         return false;
+      }
+      if (!pp_sink_char(sink, c)) return false;
+   }
+   return pp_sink_char(sink, '"');
+}
+
 static bool pp_output_write(const char* data, size_t length) {
    struct pp_sink sink = {
       output_mem,
@@ -205,6 +235,10 @@ static ptrdiff_t pp_find_macro(const char* name, size_t length) {
 }
 
 static bool pp_macro_is_defined(const char* name, size_t length) {
+   if (pp_text_equal(name, length, "__FILE__", 8)
+      || pp_text_equal(name, length, "__LINE__", 8)) {
+      return true;
+   }
    ptrdiff_t index = pp_find_macro(name, length);
    return index >= 0 && pp_macros[index].defined;
 }
@@ -682,6 +716,15 @@ static bool pp_expand_text(
                if (!pp_sink_write(sink, text + pos, raw_end - pos)) return false;
                pos = raw_end;
             }
+            continue;
+         }
+
+         if (pp_text_equal(text + begin, pos - begin, "__LINE__", 8)) {
+            if (!pp_sink_size(sink, pp_expansion_line)) return false;
+            continue;
+         }
+         if (pp_text_equal(text + begin, pos - begin, "__FILE__", 8)) {
+            if (!pp_sink_string_literal(sink, pp_expansion_path)) return false;
             continue;
          }
 
@@ -1417,6 +1460,9 @@ static bool pp_process_line(
    bool active = pp_current_active(conditions, *condition_count);
    size_t directive_begin;
    size_t directive_end;
+
+   pp_expansion_path = current_path;
+   pp_expansion_line = source_line;
 
    if (pos == length || line[pos] != '#') {
       if (active && !pp_expand_to_output(line, length)) return false;

@@ -11,13 +11,42 @@ extern int open(const char *path, int flags, int mode);
 #define CM1_OPEN2(path, flags, ignored) open(path, flags, 0)
 #define CM1_OPEN3(path, flags, mode) open(path, flags, mode)
 #define open(...) CM1_OPEN_PICK(__VA_ARGS__, CM1_OPEN3, CM1_OPEN2, 0)
+##include <float.h>
+
+#define FLT_MAX 3.402823466e+38F
 ##include <limits.h>
+##include <math.h>
+
+#define M_PI 3.14159265358979323846
+
+extern float atan2f(float y, float x);
+extern float cosf(float value);
+extern float fabsf(float value);
+extern float fmaxf(float x, float y);
+extern float fminf(float x, float y);
+extern float floorf(float value);
+extern float roundf(float value);
+extern float sinf(float value);
+extern float sqrtf(float value);
 ##include <stdbool.h>
 #define true 1
 #define false 0
 ##include <stddef.h>
 #define NULL 0
 ##include <stdint.h>
+
+#define INT8_MIN (-127 - 1)
+#define INT8_MAX 127
+#define UINT8_MAX 0xffU
+#define INT16_MIN (-32767 - 1)
+#define INT16_MAX 32767
+#define UINT16_MAX 0xffffU
+#define INT32_MIN (-2147483647 - 1)
+#define INT32_MAX 2147483647
+#define UINT32_MAX 0xffffffffU
+#define INT64_MIN (-9223372036854775807LL - 1)
+#define INT64_MAX 9223372036854775807LL
+#define UINT64_MAX 0xffffffffffffffffULL
 ##include <stdio.h>
 
 #ifndef __EMSCRIPTEN__
@@ -28,6 +57,8 @@ FILE *stdout;
 
 extern int fflush(FILE *stream);
 #endif
+
+extern void perror(const char *message);
 
 int cm1_printf_begin() {
    return 0;
@@ -60,9 +91,11 @@ extern char *realpath(const char *path, char *resolved_path);
 ##include <string.h>
 extern void *memchr(const void *ptr, int ch, size_t len);
 extern int memcmp(const void *lhs, const void *rhs, size_t len);
+extern void *memmove(void* des, void *src, size_t n);
 extern void *memcpy(void *des, const void *src, size_t len);
 extern void *memset(void *des, int value, size_t len);
 extern char *strcpy(char *des, const char *src);
+extern int strcmp(char *des, const char *src);
 extern char *strdup(const char *str);
 extern size_t strlen(const char *str);
 extern char *strrchr(const char *str, int ch);
@@ -72,6 +105,7 @@ extern int close(int fd);
 extern char *getcwd(char *buffer, size_t size);
 extern ssize_t lseek(int fd, ssize_t offset, int origin);
 extern ssize_t read(int fd, void *buffer, size_t size);
+extern int unlink(const char *path);
 extern ssize_t write(int fd, const void *buffer, size_t size);
 
 #define SEEK_SET 0

@@ -412,6 +412,20 @@ lvar-name-id-v'id[#lvar-limit]
 lvar-name-idx-v'u16[#lvar-limit]
 lvar-name-space-v'u16[#lvar-limit]
 lvar-name-c'u16
+space-lvar-anonymous(type'type, stars'stars, li'line-info)'u16 {
+   var-idx' = .lvar-c++
+   lvar' = .lvar-v[var-idx]
+   lvar.info.copy-from(li)
+   lvar.type-src = type
+   lvar.stars-src = stars
+   lvar.type-final = type.final-type(stars, lvar.stars-final)
+   if (&&, lvar.type-final.is-aggregate(), lvar.stars-final == #0,
+      lvar.type-final.field-v == null) {
+      'c1.stdout{li ": Struct or union '" type.name "' was used but it was never defined.\n"}
+      'c.exit(#failure)
+   }
+   return var-idx
+}
 space-lvar(type'type, stars'stars, name'id, array-dims'u32[], array-dim-c'u32, src'expr, li'line-info) {
    space-idx' = .space-stack-c - 1
    space' = .space-stack-v[space-idx]
