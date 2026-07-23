@@ -19,6 +19,11 @@ expr-i32(i32'i32, li'line-info)'expr {
    expr.i32 = i32
    return expr
 }
+expr-u32(u32'u32, li'line-info)'expr {
+   expr'expr-u32 = expr-alloc('expr-u32['usz], #u32, li)
+   expr.u32 = u32
+   return expr
+}
 expr-alloc(size'usz, type'expr-type, li'line-info)'ref {
    r'rdr. = ?
    r.ref = .cm1-data-mem
@@ -29,7 +34,7 @@ expr-alloc(size'usz, type'expr-type, li'line-info)'ref {
    expr.type = type
    return r.ref
 }
-enum 'expr-type[#none, #call, #i32, #assign, #math, #unary, #var, #field, #index, #inc-dec, #size-align, #cast, #logical, #f32, #f64, #conditional, #string]'u8 {
+enum 'expr-type[#none, #call, #i32, #u32, #assign, #math, #unary, #var, #field, #index, #inc-dec, #size-align, #cast, #logical, #f32, #f64, #conditional, #string]'u8 {
    cp1-name(e'this)'char @const[] @cp1-name
 }
 expr-call-fixed(func-name'id, arg-v'expr[], arg-c'u8, li'line-info)'expr {
@@ -63,6 +68,7 @@ expr-call(func-name'id, li'line-info)'expr {
 }
 struct 'expr-call[base'expr., func'func, arg-c'u8, arg-v'expr[1]]
 struct 'expr-i32[base'expr., i32'i32]
+struct 'expr-u32[base'expr., u32'u32]
 // String expressions live outside cm1-data-mem so their bytecode operands can
 // be patched after the final string-pool position is known.
 #string-limit = 1024 * 1024
@@ -340,6 +346,9 @@ expr-is-zero(expr'expr)'bool {
    if expr.type == #i32 {
       integer'expr-i32 = expr
       return integer.i32 == 0
+   } elif expr.type == #u32 {
+      integer'expr-u32 = expr
+      return integer.u32 == 0
    }
    return false
 }
@@ -518,6 +527,13 @@ struct 'expr[info'line-info., type'expr-type] {
             out-stars-c = #0
             out-stars-bc = #0
             return .type-v[5]
+         }
+         case #u32 {
+            expr'expr-u32 = expr-base
+            bc-push-u32(expr.u32)
+            out-stars-c = #0
+            out-stars-bc = #0
+            return .type-v[6]
          }
          case #string {
             expr'expr-string = expr-base

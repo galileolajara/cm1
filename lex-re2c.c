@@ -245,6 +245,10 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    hex_digits = [0-9a-fA-F]+;
    hex_integer = "0" [xX] hex_digits;
    octal_integer = "0" [0-7]+;
+   u32_suffix = [uU];
+   hex_u32 = hex_integer u32_suffix;
+   octal_u32 = octal_integer u32_suffix;
+   decimal_u32 = ("0" | [1-9][0-9]*) u32_suffix;
    decimal_exponent = [eE][+-]? decimal_digits;
    decimal_float =
       (decimal_digits "." [0-9]* | "." decimal_digits) decimal_exponent?
@@ -479,10 +483,13 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    "|="                             { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN; }
    f32_num                          { l->cursor = cursor; return CM1_TOKEN_F32_NUM; }
    f64_num                          { l->cursor = cursor; return CM1_TOKEN_F64_NUM; }
+   hex_u32                          { l->cursor = cursor; return CM1_TOKEN_U32; }
+   octal_u32                        { l->cursor = cursor; return CM1_TOKEN_U32; }
+   decimal_u32                      { l->cursor = cursor; return CM1_TOKEN_U32; }
    "0"                              { l->cursor = cursor; return CM1_TOKEN_ZERO; }
    hex_integer                      { l->cursor = cursor; return CM1_TOKEN_I32; }
    octal_integer                    { l->cursor = cursor; return CM1_TOKEN_I32; }
-   [1-9][0-9]* "u"?                      { l->cursor = cursor; return CM1_TOKEN_I32; }
+   [1-9][0-9]*                      { l->cursor = cursor; return CM1_TOKEN_I32; }
    "{"                              {
       if (curly_brace_depth == 0) {
          if (curly_brace_mode == CURLY_BRACE_MODE_C_FUNC) {
