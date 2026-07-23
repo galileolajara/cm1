@@ -1163,7 +1163,7 @@ struct 'expr[info'line-info., type'expr-type] {
             if array-size != 0 {
                value = array-size
             } elif stars-c != #0 {
-               value = 'usz['usz]
+               value = target-pointer-size()
             } elif expr.align {
                value = type-storage-align(type, #0, expr-base.info)
             } else {

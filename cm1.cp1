@@ -13,6 +13,7 @@ crc32c(seed'u32, ref'ref, len'u32)'u32 @real-name(crc32c)
 parse-f32(text'u8 @const[])'f32 @real-name(cm1_parse_f32)
 parse-f64(text'u8 @const[])'f64 @real-name(cm1_parse_f64)
 char-is-signed()'bool @real-name(cm1_char_is_signed)
+target-pointer-size()'u32 @real-name(cm1_target_pointer_size)
 #id-limit = 1024 * 1024
 id-soa'id-soa.
 struct 'id-soa[
@@ -1345,7 +1346,7 @@ arithmetic-common-type(type1'type, type2'type)'type {
    return integer-common-type(type1, type2)
 }
 target-size-type()'type {
-   if 'usz['usz] == 8 { return .type-v[8] }
+   if target-pointer-size() == 8 { return .type-v[8] }
    return .type-v[6]
 }
 bc-int-convert(type'type) {
@@ -1480,7 +1481,7 @@ builtin-type-token(tok'token)'type {
 }
 type-storage-size(type'type, stars'stars, li'line-info)'u32 {
    if stars != #0 {
-      return 'usz['usz]
+      return target-pointer-size()
    }
    switch type.kind {
       case #i8 { return 1 }
@@ -1514,7 +1515,7 @@ array-const-sizeof(type'type, stars'stars, li'line-info)'u32 {
 }
 type-storage-align(type'type, stars'stars, li'line-info)'u32 {
    if stars != #0 {
-      return 'usz['usz]
+      return target-pointer-size()
    }
    switch type.kind {
       case #i8 { return 1 }

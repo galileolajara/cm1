@@ -4,132 +4,10 @@
 #include <limits.h>
 #include <stdlib.h>
 
-#if INT_MAX == INT8_MAX
-#define CM1_C_TOKEN_INT CM1_TOKEN_INT8
-#define CM1_C_TOKEN_UINT CM1_TOKEN_UINT8
-#elif INT_MAX == INT16_MAX
-#define CM1_C_TOKEN_INT CM1_TOKEN_INT16
-#define CM1_C_TOKEN_UINT CM1_TOKEN_UINT16
-#elif INT_MAX == INT32_MAX
-#define CM1_C_TOKEN_INT CM1_TOKEN_INT32
-#define CM1_C_TOKEN_UINT CM1_TOKEN_UINT32
-#elif INT_MAX == INT64_MAX
-#define CM1_C_TOKEN_INT CM1_TOKEN_INT64
-#define CM1_C_TOKEN_UINT CM1_TOKEN_UINT64
-#else
-#error "CM1 does not support this int width"
-#endif
-
-#if SHRT_MAX == INT8_MAX
-#define CM1_C_TOKEN_SHORT CM1_TOKEN_INT8
-#define CM1_C_TOKEN_USHORT CM1_TOKEN_UINT8
-#elif SHRT_MAX == INT16_MAX
-#define CM1_C_TOKEN_SHORT CM1_TOKEN_INT16
-#define CM1_C_TOKEN_USHORT CM1_TOKEN_UINT16
-#elif SHRT_MAX == INT32_MAX
-#define CM1_C_TOKEN_SHORT CM1_TOKEN_INT32
-#define CM1_C_TOKEN_USHORT CM1_TOKEN_UINT32
-#elif SHRT_MAX == INT64_MAX
-#define CM1_C_TOKEN_SHORT CM1_TOKEN_INT64
-#define CM1_C_TOKEN_USHORT CM1_TOKEN_UINT64
-#else
-#error "CM1 does not support this short width"
-#endif
-
-#if LONG_MAX == INT8_MAX
-#define CM1_C_TOKEN_LONG CM1_TOKEN_INT8
-#define CM1_C_TOKEN_ULONG CM1_TOKEN_UINT8
-#elif LONG_MAX == INT16_MAX
-#define CM1_C_TOKEN_LONG CM1_TOKEN_INT16
-#define CM1_C_TOKEN_ULONG CM1_TOKEN_UINT16
-#elif LONG_MAX == INT32_MAX
-#define CM1_C_TOKEN_LONG CM1_TOKEN_INT32
-#define CM1_C_TOKEN_ULONG CM1_TOKEN_UINT32
-#elif LONG_MAX == INT64_MAX
-#define CM1_C_TOKEN_LONG CM1_TOKEN_INT64
-#define CM1_C_TOKEN_ULONG CM1_TOKEN_UINT64
-#else
-#error "CM1 does not support this long width"
-#endif
-
-#if LONG_MAX == INT32_MAX
-#define CM1_C_TOKEN_LONG_LITERAL CM1_TOKEN_I32
-#define CM1_C_TOKEN_ULONG_LITERAL CM1_TOKEN_U32
-#elif LONG_MAX == INT64_MAX
-#define CM1_C_TOKEN_LONG_LITERAL CM1_TOKEN_I64
-#define CM1_C_TOKEN_ULONG_LITERAL CM1_TOKEN_U64
-#else
-#error "CM1 only supports 32-bit and 64-bit long integer literals"
-#endif
-
-#if LLONG_MAX == INT8_MAX
-#define CM1_C_TOKEN_LLONG CM1_TOKEN_INT8
-#define CM1_C_TOKEN_ULLONG CM1_TOKEN_UINT8
-#elif LLONG_MAX == INT16_MAX
-#define CM1_C_TOKEN_LLONG CM1_TOKEN_INT16
-#define CM1_C_TOKEN_ULLONG CM1_TOKEN_UINT16
-#elif LLONG_MAX == INT32_MAX
-#define CM1_C_TOKEN_LLONG CM1_TOKEN_INT32
-#define CM1_C_TOKEN_ULLONG CM1_TOKEN_UINT32
-#elif LLONG_MAX == INT64_MAX
-#define CM1_C_TOKEN_LLONG CM1_TOKEN_INT64
-#define CM1_C_TOKEN_ULLONG CM1_TOKEN_UINT64
-#else
-#error "CM1 does not support this long long width"
-#endif
-
-#if LLONG_MAX == INT32_MAX
-#define CM1_C_TOKEN_LLONG_LITERAL CM1_TOKEN_I32
-#define CM1_C_TOKEN_ULLONG_LITERAL CM1_TOKEN_U32
-#elif LLONG_MAX == INT64_MAX
-#define CM1_C_TOKEN_LLONG_LITERAL CM1_TOKEN_I64
-#define CM1_C_TOKEN_ULLONG_LITERAL CM1_TOKEN_U64
-#else
-#error "CM1 only supports 32-bit and 64-bit long long integer literals"
-#endif
-
-#if SCHAR_MAX == INT8_MAX
-#define CM1_C_TOKEN_SCHAR CM1_TOKEN_INT8
-#elif SCHAR_MAX == INT16_MAX
-#define CM1_C_TOKEN_SCHAR CM1_TOKEN_INT16
-#elif SCHAR_MAX == INT32_MAX
-#define CM1_C_TOKEN_SCHAR CM1_TOKEN_INT32
-#elif SCHAR_MAX == INT64_MAX
-#define CM1_C_TOKEN_SCHAR CM1_TOKEN_INT64
-#else
-#error "CM1 does not support this signed char width"
-#endif
-
-#if UCHAR_MAX == UINT8_MAX
-#define CM1_C_TOKEN_UCHAR CM1_TOKEN_UINT8
-#elif UCHAR_MAX == UINT16_MAX
-#define CM1_C_TOKEN_UCHAR CM1_TOKEN_UINT16
-#elif UCHAR_MAX == UINT32_MAX
-#define CM1_C_TOKEN_UCHAR CM1_TOKEN_UINT32
-#elif UCHAR_MAX == UINT64_MAX
-#define CM1_C_TOKEN_UCHAR CM1_TOKEN_UINT64
-#else
-#error "CM1 does not support this unsigned char width"
-#endif
+#include "cm1_types.h"
 
 // Plain char is a lexer-only type token appended after Lemon's terminals.
 #define CM1_TOKEN_CHAR (CM1_TOKEN_OR_ASSIGN + 6)
-
-#if SIZE_MAX == UINT8_MAX
-#define CM1_C_TOKEN_SIZE_T CM1_TOKEN_UINT8
-#define CM1_C_TOKEN_SSIZE_T CM1_TOKEN_INT8
-#elif SIZE_MAX == UINT16_MAX
-#define CM1_C_TOKEN_SIZE_T CM1_TOKEN_UINT16
-#define CM1_C_TOKEN_SSIZE_T CM1_TOKEN_INT16
-#elif SIZE_MAX == UINT32_MAX
-#define CM1_C_TOKEN_SIZE_T CM1_TOKEN_UINT32
-#define CM1_C_TOKEN_SSIZE_T CM1_TOKEN_INT32
-#elif SIZE_MAX == UINT64_MAX
-#define CM1_C_TOKEN_SIZE_T CM1_TOKEN_UINT64
-#define CM1_C_TOKEN_SSIZE_T CM1_TOKEN_INT64
-#else
-#error "CM1 does not support this size_t width"
-#endif
 
 extern char string_mem[1];
 
@@ -142,7 +20,11 @@ double cm1_parse_f64(const uint8_t* text) {
 }
 
 bool cm1_char_is_signed(void) {
-   return CHAR_MIN < 0;
+   return CM1_C_CHAR_IS_SIGNED;
+}
+
+uint32_t cm1_target_pointer_size(void) {
+   return CM1_C_POINTER_SIZE;
 }
 
 bool _Tcm1_Ffunc_is_bytecode_2(const char*, size_t);

@@ -1,0 +1,79 @@
+##include <fcntl.h>
+#define O_RDONLY 0x0000
+#define O_WRONLY 0x0001
+#define O_CREAT  0x0200
+#define O_TRUNC  0x0400
+// #define O_BINARY 0
+
+extern int open(const char *path, int flags, int mode);
+
+#define CM1_OPEN_PICK(_1, _2, _3, NAME, ...) NAME(_1, _2, _3)
+#define CM1_OPEN2(path, flags, ignored) open(path, flags, 0)
+#define CM1_OPEN3(path, flags, mode) open(path, flags, mode)
+#define open(...) CM1_OPEN_PICK(__VA_ARGS__, CM1_OPEN3, CM1_OPEN2, 0)
+##include <limits.h>
+##include <stdbool.h>
+#define true 1
+#define false 0
+##include <stddef.h>
+#define NULL 0
+##include <stdint.h>
+##include <stdio.h>
+
+#ifndef __EMSCRIPTEN__
+##if 0
+typedef struct __sFILE FILE;
+FILE *stdout;
+##endif
+
+extern int fflush(FILE *stream);
+#endif
+
+int cm1_printf_begin() {
+   return 0;
+}
+int cm1_printf_s(int n, const char *fmt, const char *s) {
+   return n + printf(fmt, s);
+}
+int cm1_printf_c(int n, const char *fmt, int s) {
+   return n + printf(fmt, s);
+}
+int cm1_printf_d(int n, const char *fmt, int s) {
+   return n + printf(fmt, s);
+}
+int cm1_printf_x(int n, const char *fmt, int s) {
+   return n + printf(fmt, s);
+}
+int cm1_printf_f(int n, const char *fmt, double s) {
+   return n + printf(fmt, s);
+}
+int cm1_printf_end(int n, const char *s) {
+   return n + printf("%s", s);
+}
+##include <stdlib.h>
+extern void *malloc(size_t size);
+extern void *realloc(void* oldptr, size_t size);
+extern void free(void *ptr);
+extern void exit(int status);
+extern char *getenv(const char *name);
+extern char *realpath(const char *path, char *resolved_path);
+##include <string.h>
+extern void *memchr(const void *ptr, int ch, size_t len);
+extern int memcmp(const void *lhs, const void *rhs, size_t len);
+extern void *memcpy(void *des, const void *src, size_t len);
+extern void *memset(void *des, int value, size_t len);
+extern char *strcpy(char *des, const char *src);
+extern char *strdup(const char *str);
+extern size_t strlen(const char *str);
+extern char *strrchr(const char *str, int ch);
+extern char *strtok(char *str, const char *delimiters);
+##include <unistd.h>
+extern int close(int fd);
+extern char *getcwd(char *buffer, size_t size);
+extern ssize_t lseek(int fd, ssize_t offset, int origin);
+extern ssize_t read(int fd, void *buffer, size_t size);
+extern ssize_t write(int fd, const void *buffer, size_t size);
+
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
