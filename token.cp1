@@ -65,6 +65,7 @@ main(arg-c'cint, arg-v'char[][])'cint {
       '= #const,
       '= #static,
       '= #inline,
+      '= #char,
       '= ]'cint {
       '= cp1-name(e'this)'char[] @cp1-name
       '= }

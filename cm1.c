@@ -44,16 +44,17 @@
 #define CM1_OP_LVAR_SPILL          43
 #define CM1_OP_MEM_INC_DEC_PTR     44
 
-#define CM1_TYPE_I8  1
-#define CM1_TYPE_U8  2
-#define CM1_TYPE_I16 3
-#define CM1_TYPE_U16 4
-#define CM1_TYPE_I32 5
-#define CM1_TYPE_U32 6
-#define CM1_TYPE_I64 7
-#define CM1_TYPE_U64 8
-#define CM1_TYPE_F32 9
-#define CM1_TYPE_F64 10
+#define CM1_TYPE_CHAR 1
+#define CM1_TYPE_I8   2
+#define CM1_TYPE_U8   3
+#define CM1_TYPE_I16  4
+#define CM1_TYPE_U16  5
+#define CM1_TYPE_I32  6
+#define CM1_TYPE_U32  7
+#define CM1_TYPE_I64  8
+#define CM1_TYPE_U64  9
+#define CM1_TYPE_F32  10
+#define CM1_TYPE_F64  11
 
 static uint8_t* cm1_bytecode;
 static uint32_t cm1_lvar_pos;
@@ -65,11 +66,12 @@ typedef float cm1_unaligned_f32 __attribute__((aligned(1), may_alias));
 typedef double cm1_unaligned_f64 __attribute__((aligned(1), may_alias));
 
 static bool cm1_int_is_valid(uint8_t kind) {
-   return kind >= CM1_TYPE_I8 && kind <= CM1_TYPE_U64;
+   return kind >= CM1_TYPE_CHAR && kind <= CM1_TYPE_U64;
 }
 
 static bool cm1_int_is_signed(uint8_t kind) {
-   return (kind & 1) != 0;
+   if (kind == CM1_TYPE_CHAR) return (char)-1 < 0;
+   return (kind & 1) == 0;
 }
 
 static unsigned cm1_int_rank(uint8_t kind) {
@@ -77,6 +79,7 @@ static unsigned cm1_int_rank(uint8_t kind) {
       printf("invalid integer type: %u\n", kind);
       exit(EXIT_FAILURE);
    }
+   if (kind == CM1_TYPE_CHAR) return 0;
    return (kind - CM1_TYPE_I8) >> 1;
 }
 

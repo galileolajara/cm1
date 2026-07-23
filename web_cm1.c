@@ -1,4 +1,4 @@
-// c4ddf5e5
+// c1ea1b68
 // #define CM1_DEBUG_STACK
 // #define CM1_DEBUG_STACK_ALLOC
 
@@ -42,27 +42,36 @@ union cm1_stack_item {
 static union cm1_stack_item cm1_stack_v[CM1_STACK_LIMIT];
 static uint32_t cm1_stack_pos;
 
+static void cm1_push_f32(float value) {
+   cm1_stack_v[cm1_stack_pos].u64 = 0;
+   cm1_stack_v[cm1_stack_pos++].f32 = value;
+}
+
+static void cm1_push_f64(double value) {
+   cm1_stack_v[cm1_stack_pos++].f64 = value;
+}
+
 void cm1_init(const char* cm1_path);
 void cm1_run(uint16_t func_idx);
 int32_t cm1_printf_begin() {
    return 0;
 }
-int32_t cm1_printf_s(int32_t n, int8_t *fmt, int8_t *s) {
+int32_t cm1_printf_s(int32_t n, char *fmt, char *s) {
    return n + printf(fmt, s);
 }
-int32_t cm1_printf_x(int32_t n, int8_t *fmt, int32_t x) {
+int32_t cm1_printf_x(int32_t n, char *fmt, int32_t x) {
    return n + printf(fmt, x);
 }
-int32_t cm1_printf_c(int32_t n, int8_t *fmt, int32_t c) {
+int32_t cm1_printf_c(int32_t n, char *fmt, int32_t c) {
    return n + printf(fmt, c);
 }
-int32_t cm1_printf_d(int32_t n, int8_t *fmt, int32_t val) {
+int32_t cm1_printf_d(int32_t n, char *fmt, int32_t val) {
    return n + printf(fmt, val);
 }
-int32_t cm1_printf_f(int32_t n, int8_t *fmt, double val) {
+int32_t cm1_printf_f(int32_t n, char *fmt, double val) {
    return n + printf(fmt, val);
 }
-int32_t cm1_printf_end(int32_t n, int8_t *str) {
+int32_t cm1_printf_end(int32_t n, char *str) {
    return n + printf("%s", str);
 }
 #ifndef run
@@ -179,28 +188,20 @@ void cm1_run_c(uint16_t func_idx) {
 #define CM1_OP_LVAR_SPILL          43
 #define CM1_OP_MEM_INC_DEC_PTR     44
 
-#define CM1_TYPE_I8  1
-#define CM1_TYPE_U8  2
-#define CM1_TYPE_I16 3
-#define CM1_TYPE_U16 4
-#define CM1_TYPE_I32 5
-#define CM1_TYPE_U32 6
-#define CM1_TYPE_I64 7
-#define CM1_TYPE_U64 8
-#define CM1_TYPE_F32 9
-#define CM1_TYPE_F64 10
+#define CM1_TYPE_CHAR 1
+#define CM1_TYPE_I8   2
+#define CM1_TYPE_U8   3
+#define CM1_TYPE_I16  4
+#define CM1_TYPE_U16  5
+#define CM1_TYPE_I32  6
+#define CM1_TYPE_U32  7
+#define CM1_TYPE_I64  8
+#define CM1_TYPE_U64  9
+#define CM1_TYPE_F32  10
+#define CM1_TYPE_F64  11
 
 static uint8_t* cm1_bytecode;
 static uint32_t cm1_lvar_pos;
-
-static void cm1_push_f32(float value) {
-   cm1_stack_v[cm1_stack_pos].u64 = 0;
-   cm1_stack_v[cm1_stack_pos++].f32 = value;
-}
-
-static void cm1_push_f64(double value) {
-   cm1_stack_v[cm1_stack_pos++].f64 = value;
-}
 
 typedef uint16_t cm1_unaligned_u16 __attribute__((aligned(1), may_alias));
 typedef uint32_t cm1_unaligned_u32 __attribute__((aligned(1), may_alias));
@@ -209,11 +210,12 @@ typedef float cm1_unaligned_f32 __attribute__((aligned(1), may_alias));
 typedef double cm1_unaligned_f64 __attribute__((aligned(1), may_alias));
 
 static bool cm1_int_is_valid(uint8_t kind) {
-   return kind >= CM1_TYPE_I8 && kind <= CM1_TYPE_U64;
+   return kind >= CM1_TYPE_CHAR && kind <= CM1_TYPE_U64;
 }
 
 static bool cm1_int_is_signed(uint8_t kind) {
-   return (kind & 1) != 0;
+   if (kind == CM1_TYPE_CHAR) return (char)-1 < 0;
+   return (kind & 1) == 0;
 }
 
 static unsigned cm1_int_rank(uint8_t kind) {
@@ -221,6 +223,7 @@ static unsigned cm1_int_rank(uint8_t kind) {
       printf("invalid integer type: %u\n", kind);
       exit(EXIT_FAILURE);
    }
+   if (kind == CM1_TYPE_CHAR) return 0;
    return (kind - CM1_TYPE_I8) >> 1;
 }
 

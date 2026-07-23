@@ -92,11 +92,8 @@
 #error "CM1 does not support this unsigned char width"
 #endif
 
-#if CHAR_MIN < 0
-#define CM1_C_TOKEN_CHAR CM1_C_TOKEN_SCHAR
-#else
-#define CM1_C_TOKEN_CHAR CM1_C_TOKEN_UCHAR
-#endif
+// Plain char is a lexer-only type token appended after Lemon's terminals.
+#define CM1_TOKEN_CHAR (CM1_TOKEN_OR_ASSIGN + 6)
 
 #if SIZE_MAX == UINT8_MAX
 #define CM1_C_TOKEN_SIZE_T CM1_TOKEN_UINT8
@@ -357,6 +354,7 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    "const"                          { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 3; }
    "static"                         { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 4; }
    "inline"                         { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 5; }
+   "char" / [^a-zA-Z0-9_]          { l->cursor = cursor; return CM1_TOKEN_CHAR; }
    "# " [^\000\n]+                  {
       l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 2;
    }
@@ -397,7 +395,6 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    c_unsigned_int / [^a-zA-Z0-9_]  { l->cursor = cursor; return CM1_C_TOKEN_UINT; }
    c_signed_short / [^a-zA-Z0-9_]  { l->cursor = cursor; return CM1_C_TOKEN_SHORT; }
    c_unsigned_short / [^a-zA-Z0-9_] { l->cursor = cursor; return CM1_C_TOKEN_USHORT; }
-   "char" / [^a-zA-Z0-9_]          { l->cursor = cursor; return CM1_C_TOKEN_CHAR; }
    (kw_signed spaces "char" | "char" spaces kw_signed) / [^a-zA-Z0-9_]
                                     { l->cursor = cursor; return CM1_C_TOKEN_SCHAR; }
    (kw_unsigned spaces "char" | "char" spaces kw_unsigned) / [^a-zA-Z0-9_]

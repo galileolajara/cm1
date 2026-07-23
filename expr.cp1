@@ -506,8 +506,7 @@ struct 'expr[info'line-info., type'expr-type] {
             bc-n32(expr.str-offset)
             out-stars-c = #1
             out-stars-bc = #1
-            if char-is-signed() { return .type-v[1] }
-            return .type-v[2]
+            return .type-v[11]
          }
          case #f32 {
             expr'expr-f32 = expr-base

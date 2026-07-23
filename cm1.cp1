@@ -273,7 +273,7 @@ parse(in-path'char @const[]) {
       .last-col = .col
       .row = tok.i32.row
       .col = tok.i32.col
-      if (&&, t >= #int64, t < #void) {
+      if (||, (&&, t >= #int64, t < #void), t == #char) {
          tok.ptr.ptr = builtin-type-token(t)
          tok.ptr.ptr2 = null // Not an extern
          t = #type
@@ -1121,9 +1121,9 @@ export() {
    enum-member(#nil, 0, false, null)
    enum-end()
 }
-// Integer kinds are signed/unsigned pairs ordered by storage width.  The VM
-// relies on this layout to derive signedness and size directly from the value.
-enum 'type-kind[#void, #i8, #u8, #i16, #u16, #i32, #u32, #i64, #u64, #f32, #f64, #struct, #typedef, #union, #enum]'u8 {
+// Integer and floating kinds are contiguous. Plain char precedes the
+// signed/unsigned fixed-width pairs ordered by storage width.
+enum 'type-kind[#void, #char, #i8, #u8, #i16, #u16, #i32, #u32, #i64, #u64, #f32, #f64, #struct, #typedef, #union, #enum]'u8 {
    cp1-name(e'this)'char @const[] @cp1-name
 }
 struct 'field[name'id, stars-src'stars, stars-final'stars, type-src'type, type-final'type, offset'u32, array-dim-start'u32, array-dim-c'u32, array-size'u32] {
@@ -1144,7 +1144,7 @@ struct 'type[name'id, kind'type-kind, field-c'u16, align'u8, size'u32, field-v'f
       return (||, type.kind == #struct, type.kind == #union)
    }
    is-integer(type'this)'bool {
-      return (&&, type.kind >= #i8, type.kind <= #u64)
+      return (&&, type.kind >= #char, type.kind <= #u64)
    }
    is-floating(type'this)'bool {
       return (||, type.kind == #f32, type.kind == #f64)
@@ -1153,10 +1153,13 @@ struct 'type[name'id, kind'type-kind, field-c'u16, align'u8, size'u32, field-v'f
       return (||, type.is-integer(), type.is-floating())
    }
    is-signed-integer(type'this)'bool {
-      return (&&, type.is-integer(), ('u8(type.kind) & 1) != 0)
+      if type.kind == #char { return char-is-signed() }
+      return (&&, type.kind >= #i8, type.kind <= #u64,
+         ('u8(type.kind) & 1) == 0)
    }
    integer-promote(type'this)'type {
-      if (&&, type.kind >= #i8, type.kind <= #u16) {
+      if (||, type.kind == #char,
+         (&&, type.kind >= #i8, type.kind <= #u16)) {
          return .type-v[5]
       }
       return type
@@ -1367,6 +1370,7 @@ builtin-type-token(tok'token)'type {
       case #uint8 { return .type-v[2] }
       case #f32 { return .type-v[9] }
       case #f64 { return .type-v[10] }
+      case #char { return .type-v[11] }
       case #void { return .type-v[0] }
       default {
          'c1.stdout{"Internal error: Token '" token-name(tok) "' is not an integer type\n"}
@@ -1382,6 +1386,7 @@ type-storage-size(type'type, stars'stars, li'line-info)'u32 {
    switch type.kind {
       case #i8 { return 1 }
       case #u8 { return 1 }
+      case #char { return 1 }
       case #i16 { return 2 }
       case #u16 { return 2 }
       case #i32 { return 4 }
@@ -1415,6 +1420,7 @@ type-storage-align(type'type, stars'stars, li'line-info)'u32 {
    switch type.kind {
       case #i8 { return 1 }
       case #u8 { return 1 }
+      case #char { return 1 }
       case #i16 { return 2 }
       case #u16 { return 2 }
       case #i32 { return 4 }
@@ -2021,6 +2027,12 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
       type.kind = #f64
    }
 
+   if true {
+      type' = .type-v[.type-c++]
+      type.name = id-get("char", 4)
+      type.kind = #char
+   }
+
    .id-printf = id-get("printf", 6)
 
    .cm1-bytecode-wtr.ref = .cm1-bytecode.buf
@@ -2317,6 +2329,13 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
                      }
                      case #u64 {
                         f.add{"         uint64_t arg" j " = cm1_pop_u64();\n"}
+                     }
+                     case #char {
+                        if char-is-signed() {
+                           f.add{"         char arg" j " = cm1_pop_i64();\n"}
+                        } else {
+                           f.add{"         char arg" j " = cm1_pop_u64();\n"}
+                        }
                      }
                      case #f32 {
                         f.add{"         float arg" j " = cm1_pop_f32();\n"}
