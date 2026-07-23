@@ -360,6 +360,7 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    "# " [^\000\n]+                  {
       l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 2;
    }
+   "#" [^ ] [^\000\n]+              { l->cursor = cursor; return CM1_TOKEN_PREPROCESSOR; }
    spaces                           { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN + 1; }
    ";"                              {
       if (curly_brace_depth == 0) {

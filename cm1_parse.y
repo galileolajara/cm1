@@ -154,6 +154,10 @@ decl ::= decl_gvar.
 decl ::= decl_aggregate.
 decl ::= decl_enum.
 decl ::= decl_typedef.
+decl ::= decl_preprocessor.
+
+decl_preprocessor ::= PREPROCESSOR(t).
+{ _Tcm1_Fdecl_preprocessor_2(t.ptr.ptr, (size_t)t.ptr.ptr2); }
 
 decl_typedef_type ::= TYPE(t).
 { _Tcm1_Ftypedef_begin_1(t.ptr.ptr); }
@@ -523,14 +527,14 @@ array_const_primary(out) ::= LPAREN array_const_expr(e) RPAREN.
 }
 
 decl_func_begin_c ::= type(t) FUNC_C.
-{ _Tcm1_Ffunc_decl_3(t.ptr.ptr, (size_t)t.ptr.ptr2, PATH(t)); }
+{ _Tcm1_Ffunc_decl_4(t.ptr.ptr, (size_t)t.ptr.ptr2, PATH(t), (size_t)t.ptr.ptr3 == 1); }
 decl_func_c ::= decl_func_begin_c decl_func_args_list C_CODE(c).
 { _Tcm1_Ffunc_code_c_2(c.ptr.ptr, c.ptr.ptr2 - c.ptr.ptr); }
 decl_func_c ::= decl_func_begin_c decl_func_args_list SEMICOLON.
 { _Tcm1_Ffunc_decl_0(); }
 
 decl_func_begin_cm1 ::= type(t) FUNC_BC.
-{ _Tcm1_Ffunc_decl_3(t.ptr.ptr, (size_t)t.ptr.ptr2, PATH(t)); }
+{ _Tcm1_Ffunc_decl_4(t.ptr.ptr, (size_t)t.ptr.ptr2, PATH(t), (size_t)t.ptr.ptr3 == 1); }
 decl_func_cm1 ::= decl_func_begin_cm1 decl_func_args_list space_begin(space) space.
 { _Tcm1_Ffunc_code_bc_1(space.ptr.ptr); }
 decl_func_cm1 ::= decl_func_begin_cm1 decl_func_args_list SEMICOLON.

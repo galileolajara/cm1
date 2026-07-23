@@ -1645,6 +1645,37 @@ static bool pp_process_buffer(
       bool escaped = false;
       bool line_done = false;
 
+      /* A physical line beginning with "##" escapes this preprocessing pass.
+       * Copy it verbatim except for removing the first '#'.  Detect it before
+       * line splicing, comment removal, directive parsing, and macro expansion.
+       * Enclosing conditional directives still decide whether the line is
+       * active, just as they do for every other source line. */
+      if (!block_comment && input_length - input_pos >= 2u
+         && input[input_pos] == '#' && input[input_pos + 1u] == '#') {
+         size_t raw_begin = input_pos + 1u;
+         size_t raw_end = raw_begin;
+         bool has_newline = false;
+         while (raw_end < input_length
+            && input[raw_end] != '\r' && input[raw_end] != '\n') {
+            raw_end++;
+         }
+         if (pp_current_active(conditions, condition_count)
+            && !pp_output_write(input + raw_begin, raw_end - raw_begin)) {
+            return false;
+         }
+         input_pos = raw_end;
+         if (input_pos < input_length) {
+            has_newline = true;
+            if (input[input_pos++] == '\r' && input_pos < input_length
+               && input[input_pos] == '\n') {
+               input_pos++;
+            }
+         }
+         if (!pp_emit_newlines(has_newline ? 1u : 0u)) return false;
+         if (has_newline) source_line++;
+         continue;
+      }
+
       while (input_pos < input_length && !line_done && !pp_failed) {
          char c = pp_source_char(input, input_length, &input_pos);
 

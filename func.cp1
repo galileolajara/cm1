@@ -5,7 +5,7 @@ using 'cm1 {
 func-v'func.[#func-limit]
 func-name-v'id[#func-limit]
 func-c'u32
-struct 'func[info'line-info., type-src'type, type-final'type, stars-src'stars, stars-final'stars, code'ref, code-len'u32, func-idx'u16, arg-start'u32, lvar-start'u32, arg-c'u8, cm1'bool] {
+struct 'func[info'line-info., type-src'type, type-final'type, stars-src'stars, stars-final'stars, code'ref, code-len'u32, func-idx'u16, arg-start'u32, lvar-start'u32, arg-c'u8, cm1'bool, extern'bool] {
    name(func'this)'id {
       r1'rdr. = ?
       r1.ref = .func-v
@@ -26,7 +26,9 @@ func-arg-start'u32
 func-arg-c'u8
 func-lvar-stack-c'u16
 func-info'line-info.
-func-decl(type'type, stars'stars, li'line-info) {
+func-extern'bool
+func-decl(type'type, stars'stars, li'line-info, extern'bool) {
+   .func-extern = extern
    .func-type = type
    .func-stars = stars
    .func-info.copy-from(li)
@@ -91,6 +93,7 @@ func-add(with-code'bool)'func {
    .func-lvar-stack-c = 0
    func.arg-start = .func-arg-start
    func.lvar-start = .lvar-c
+   func.extern = .func-extern
    d' = .decl-c++
    if with-code {
       .decl-type-v[d] = #func

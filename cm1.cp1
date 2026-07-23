@@ -172,6 +172,7 @@ struct 'token-data-u64[
    row'u32,
    col'u32,
    id'u64,
+   id2'u64,
 ]
 struct 'token-data-ptr[
    path'char @const[],
@@ -285,6 +286,16 @@ parse(in-path'char @const[]) {
       switch t {
          case #spaces, #const, #static, #inline {
             // Do nothing
+         }
+         case #preprocessor {
+            tok.ptr.ptr = lex.start
+            r1'rdr. = ?
+            r1.ref = lex.start
+            r2'rdr. = ?
+            r2.ref = lex.cursor
+            tok.u64.id2 = r2.pos - r1.pos
+            .last-token = t
+            psr.parse(t, tok)
          }
          case #line-info {
             r1'rdr. = ?
@@ -657,7 +668,7 @@ stmt-alloc(size'usz, type'stmt-type, li'line-info)'ref {
    return r.ref
 }
 #decl-limit = #type-limit + #func-limit + #typename-limit
-enum 'decl-type[#aggregate-forward, #aggregate, #typedef-aggregate, #enum, #typedef-enum, #typedef, #typedef-name, #func-forward, #func, #gvar]'u8
+enum 'decl-type[#aggregate-forward, #aggregate, #typedef-aggregate, #enum, #typedef-enum, #typedef, #typedef-name, #func-forward, #func, #gvar, #preprocessor]'u8
 decl-type-v'decl-type[#decl-limit]
 decl-ptr-v'ref[#decl-limit]
 decl-c'u32
@@ -1038,7 +1049,14 @@ stmt-goto(name'id, li'line-info) {
    stmt.name = name
    space-add(stmt.base)
 }
+decl-preprocessor(str'char[], len'u32) {
+   d' = .decl-c++
+   .decl-type-v[d] = #preprocessor
+   str[-1] = len
+   .decl-ptr-v[d] = str
+}
 export() {
+   decl-preprocessor(null, 0)
    stmt-if-begin(null)
    stmt-if-space(null)
    stmt-if-end()
@@ -1074,7 +1092,7 @@ export() {
    declarator-lvar(#0, #nil, null, 0, null, null)
    token-name(#end)
    stdout-then-print-error("", 0)
-   func-decl(null, #0, null)
+   func-decl(null, #0, null, false)
    func-decl-arg(null, #0, #nil, null)
    func-decl()
    func-code-c("", 0)
@@ -1763,18 +1781,18 @@ clear-memory() {
    // Clear only the prefixes used by the previous compilation. Some entries
    // contain pointers or flags which are not overwritten on every allocation.
    id-c' = 'u32(.id-c)
-   'c.memset(.id-soa.crc32c, 0, id-c * 'u32['usz])
-   'c.memset(.id-soa.ptr, 0, id-c * 'ref['usz])
-   'c.memset(.id-soa.len, 0, id-c * 'u8['usz])
+   // 'c.memset(.id-soa.crc32c, 0, id-c * 'u32['usz]) // No need to clear this
+   // 'c.memset(.id-soa.ptr, 0, id-c * 'ref['usz]) // No need to clear this
+   // 'c.memset(.id-soa.len, 0, id-c * 'u8['usz]) // No need to clear this
 
-   'c.memset(.cm1-data-mem, 0, .cm1-data-pos)
+   // 'c.memset(.cm1-data-mem, 0, .cm1-data-pos) // No need to clear this
    'c.memset(.decl-type-v, 0, .decl-c * 'decl-type['usz])
-   'c.memset(.decl-ptr-v, 0, .decl-c * 'ref['usz])
+   // 'c.memset(.decl-ptr-v, 0, .decl-c * 'ref['usz]) // No need to clear this
    'c.memset(.type-v, 0, .type-c * 'type['usz])
-   'c.memset(.typename-id-v, 0, .typename-c * 'id['usz])
-   'c.memset(.typename-type-v, 0, .typename-c * 'ref['usz])
+   // 'c.memset(.typename-id-v, 0, .typename-c * 'id['usz]) // No need to clear this
+   // 'c.memset(.typename-type-v, 0, .typename-c * 'ref['usz]) // No need to clear this
    'c.memset(.gvar-v, 0, .gvar-c * 'gvar['usz])
-   'c.memset(.gvar-name-v, 0, .gvar-c * 'id['usz])
+   // 'c.memset(.gvar-name-v, 0, .gvar-c * 'id['usz]) // No need to clear this
    'c.memset(.array-dim-v, 0, .array-dim-count * 'u32['usz])
    'c.memset(.field-v, 0, .field-c * 'field['usz])
    // field-mem-c is stored as a byte count.
@@ -1782,28 +1800,28 @@ clear-memory() {
    'c.memset(.enum-member-v, 0, .enum-member-c * 'enum-member['usz])
 
    'c.memset(.func-v, 0, .func-c * 'func['usz])
-   'c.memset(.func-name-v, 0, .func-c * 'id['usz])
+   // 'c.memset(.func-name-v, 0, .func-c * 'id['usz]) // No need to clear this
    'c.memset(.func-decl-arg-v, 0, .func-decl-arg-c * 'func-decl-arg['usz])
 
    'c.memset(.expr-str-v, 0, .expr-str-c * 'expr-string['usz])
-   loop i' = 0; .expr-call-stack-depth; i++ {
-      'c.memset(.expr-call-stack-v[i], 0, .expr-call-stack-c[i] * 'ref['usz])
-   }
+   // loop i' = 0; .expr-call-stack-depth; i++ {
+   //    'c.memset(.expr-call-stack-v[i], 0, .expr-call-stack-c[i] * 'ref['usz]) // No need to clear this
+   // }
    'c.memset(.expr-call-stack-c, 0, .expr-call-stack-depth * 'u8['usz])
 
    'c.memset(.space-v, 0, .space-c * 'space['usz])
-   'c.memset(.space-stack-v, 0, .space-stack-c * 'ref['usz])
+   // 'c.memset(.space-stack-v, 0, .space-stack-c * 'ref['usz]) // No need to clear this
    'c.memset(.lvar-v, 0, .lvar-c * 'lvar['usz])
-   'c.memset(.lvar-name-id-v, 0, .lvar-name-c * 'id['usz])
-   'c.memset(.lvar-name-idx-v, 0, .lvar-name-c * 'u16['usz])
-   'c.memset(.lvar-name-space-v, 0, .lvar-name-c * 'u16['usz])
-   'c.memset(.if-stack-v, 0, .if-stack-c * 'ref['usz])
+   // 'c.memset(.lvar-name-id-v, 0, .lvar-name-c * 'id['usz]) // No need to clear this
+   // 'c.memset(.lvar-name-idx-v, 0, .lvar-name-c * 'u16['usz]) // No need to clear this
+   // 'c.memset(.lvar-name-space-v, 0, .lvar-name-c * 'u16['usz]) // No need to clear this
+   // 'c.memset(.if-stack-v, 0, .if-stack-c * 'ref['usz]) // No need to clear this
    'c.memset(.named-label-v, 0, .named-label-c * 'named-label-entry['usz])
    'c.memset(.goto-jump-v, 0, .goto-jump-c * 'goto-jump-entry['usz])
    'c.memset(.control-stack-v, 0, .control-stack-c * 'control-frame['usz])
-   'c.memset(.break-jump-v, 0, .break-jump-c * 'ref['usz])
-   'c.memset(.continue-jump-v, 0, .continue-jump-c * 'ref['usz])
-   'c.memset(.switch-stack-v, 0, .switch-stack-c * 'ref['usz])
+   // 'c.memset(.break-jump-v, 0, .break-jump-c * 'ref['usz]) // No need to clear this
+   // 'c.memset(.continue-jump-v, 0, .continue-jump-c * 'ref['usz]) // No need to clear this
+   // 'c.memset(.switch-stack-v, 0, .switch-stack-c * 'ref['usz]) // No need to clear this
 
    bytecode-start'rdr. = ?
    bytecode-start.ref = .cm1-bytecode.buf
@@ -1819,10 +1837,10 @@ clear-memory() {
    offset-start.ref = .cm1-bytecode.buf
    offset-start.pos -= offset-byte-c
    'c.memset(offset-start.ref, 0, offset-byte-c)
-   'c.memset(.cm1-bytecode.str, 0, .cm1-string-pos)
-   'c.memset(.cm1-string-offset-v, 0, .cm1-string-count * 'u32['usz])
-   'c.memset(.cm1-string-len-v, 0, .cm1-string-count * 'u32['usz])
-   'c.memset(.cm1-string-crc32c-v, 0, .cm1-string-count * 'u32['usz])
+   // 'c.memset(.cm1-bytecode.str, 0, .cm1-string-pos) // No need to clear this
+   // 'c.memset(.cm1-string-offset-v, 0, .cm1-string-count * 'u32['usz]) // No need to clear this
+   // 'c.memset(.cm1-string-len-v, 0, .cm1-string-count * 'u32['usz]) // No need to clear this
+   // 'c.memset(.cm1-string-crc32c-v, 0, .cm1-string-count * 'u32['usz]) // No need to clear this
 
    .printed-error = false
    .cfg-has-cm1 = false
@@ -2015,6 +2033,10 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
       decl-c' = .decl-c
       loop i' = 0; i < decl-c; i++ {
          switch .decl-type-v[i] {
+            case #preprocessor {
+               str'char[] = .decl-ptr-v[i]
+               f.add{str, 'u8(str[-1]) ''\n}
+            }
             case #aggregate-forward {
                type'type = .decl-ptr-v[i]
                output-type-name(f, type)
@@ -2060,6 +2082,7 @@ main(arg-c'cint, arg-v'char @const[][])'cint {
             }
             case #func-forward {
                func'func = .decl-ptr-v[i]
+               if func.extern { continue }
                type' = func.type-src
                stars' = func.stars-src
                // A runtime header may expose the function through a macro (for
