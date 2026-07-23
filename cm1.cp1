@@ -1108,6 +1108,9 @@ export() {
    expr-f32('f32(0), null)
    expr-f64('f64(0), null)
    expr-string(null, 0, null)
+   expr-string-concat-begin(null, 0, null)
+   expr-string-concat-append(0, null, 0, null)
+   expr-string-concat-end(0, null)
    expr-conditional(null, null, null)
    func-is-bytecode(null, 0)
    gvar-decl(null, #0, false, #nil, null, 0, null)
@@ -1623,13 +1626,11 @@ cm1-string-intern-printf-text(decoded'char @const[], len'u32, li'line-info, out-
    }
    return cm1-string-intern-candidate(start, pos, li, out-len)
 }
-cm1-string-intern(raw'char @const[], raw-len'u32, li'line-info, out-len'u32&)'u32 {
+cm1-string-decode(raw'char @const[], raw-len'u32, li'line-info, pos'u32&) {
    if (||, raw-len < 2, raw[0] != 'char(34), raw[raw-len - 1] != 'char(34)) {
       'c1.stdout{li ": Invalid string literal\n"}
       'c.exit(#failure)
    }
-   start' = .cm1-string-pos
-   pos' = start
    end' = raw-len - 1
    loop i' = 1; i < end; {
       c'u8 = 'u8(raw[i++])
@@ -1736,6 +1737,11 @@ cm1-string-intern(raw'char @const[], raw-len'u32, li'line-info, out-len'u32&)'u3
          'c.exit(#failure)
       }
    }
+}
+cm1-string-intern(raw'char @const[], raw-len'u32, li'line-info, out-len'u32&)'u32 {
+   start' = .cm1-string-pos
+   pos' = start
+   cm1-string-decode(raw, raw-len, li, pos)
    return cm1-string-intern-candidate(start, pos, li, out-len)
 }
 cfg-has-cm1'bool

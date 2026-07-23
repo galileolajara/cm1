@@ -698,8 +698,24 @@ expr_i32(out) ::= ZERO(z).
 expr_i32(out) ::= I32(i).
 { out.ptr.ptr = _Tcm1_Fexpr_i32_2(i.basic.id, PATH(i)); }
 
-expr_string(out) ::= STRING(s).
-{ out.ptr.ptr = _Tcm1_Fexpr_string_3(s.ptr.ptr, s.ptr.ptr2 - s.ptr.ptr, PATH(s)); }
+string_literals(out) ::= STRING(s).
+{
+   out.u64.path = s.u64.path;
+   out.u64.row = s.u64.row;
+   out.u64.col = s.u64.col;
+   out.u64.u64 = _Tcm1_Fexpr_string_concat_begin_3(
+      s.ptr.ptr, s.ptr.ptr2 - s.ptr.ptr, PATH(s));
+}
+string_literals(out) ::= string_literals(a) STRING(s).
+{
+   out.u64.path = a.u64.path;
+   out.u64.row = a.u64.row;
+   out.u64.col = a.u64.col;
+   out.u64.u64 = _Tcm1_Fexpr_string_concat_append_4(
+      a.u64.u64, s.ptr.ptr, s.ptr.ptr2 - s.ptr.ptr, PATH(s));
+}
+expr_string(out) ::= string_literals(s).
+{ out.ptr.ptr = _Tcm1_Fexpr_string_concat_end_2(s.u64.u64, PATH(s)); }
 stmt_expr ::= expr.
 stmt_no_if ::= stmt_return.
 stmt_no_if ::= stmt_while.

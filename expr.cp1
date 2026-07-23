@@ -95,6 +95,28 @@ expr-string(raw'char @const[], raw-len'u32, li'line-info)'expr {
    expr.str-offset = cm1-string-intern(raw, raw-len, li, expr.str-len)
    return expr
 }
+expr-string-concat-begin(raw'char @const[], raw-len'u32, li'line-info)'u64 {
+   start' = .cm1-string-pos
+   pos' = start
+   cm1-string-decode(raw, raw-len, li, pos)
+   return ('u64(start) << 32) | pos
+}
+expr-string-concat-append(state'u64, raw'char @const[], raw-len'u32,
+   li'line-info)'u64 {
+   start' = 'u32(state >> 32)
+   pos' = 'u32(state)
+   cm1-string-decode(raw, raw-len, li, pos)
+   return ('u64(start) << 32) | pos
+}
+expr-string-concat-end(state'u64, li'line-info)'expr {
+   start' = 'u32(state >> 32)
+   pos' = 'u32(state)
+   expr'expr-string = expr-string-alloc(li)
+   expr.raw = null
+   expr.raw-len = 0
+   expr.str-offset = cm1-string-intern-candidate(start, pos, li, expr.str-len)
+   return expr
+}
 expr-string-decoded(decoded'char @const[], len'u32, li'line-info)'expr {
    expr'expr-string = expr-string-alloc(li)
    expr.raw = null
