@@ -52,6 +52,16 @@
 #error "CM1 does not support this long width"
 #endif
 
+#if LONG_MAX == INT32_MAX
+#define CM1_C_TOKEN_LONG_LITERAL CM1_TOKEN_I32
+#define CM1_C_TOKEN_ULONG_LITERAL CM1_TOKEN_U32
+#elif LONG_MAX == INT64_MAX
+#define CM1_C_TOKEN_LONG_LITERAL CM1_TOKEN_I64
+#define CM1_C_TOKEN_ULONG_LITERAL CM1_TOKEN_U64
+#else
+#error "CM1 only supports 32-bit and 64-bit long integer literals"
+#endif
+
 #if LLONG_MAX == INT8_MAX
 #define CM1_C_TOKEN_LLONG CM1_TOKEN_INT8
 #define CM1_C_TOKEN_ULLONG CM1_TOKEN_UINT8
@@ -66,6 +76,16 @@
 #define CM1_C_TOKEN_ULLONG CM1_TOKEN_UINT64
 #else
 #error "CM1 does not support this long long width"
+#endif
+
+#if LLONG_MAX == INT32_MAX
+#define CM1_C_TOKEN_LLONG_LITERAL CM1_TOKEN_I32
+#define CM1_C_TOKEN_ULLONG_LITERAL CM1_TOKEN_U32
+#elif LLONG_MAX == INT64_MAX
+#define CM1_C_TOKEN_LLONG_LITERAL CM1_TOKEN_I64
+#define CM1_C_TOKEN_ULLONG_LITERAL CM1_TOKEN_U64
+#else
+#error "CM1 only supports 32-bit and 64-bit long long integer literals"
 #endif
 
 #if SCHAR_MAX == INT8_MAX
@@ -246,9 +266,29 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    hex_integer = "0" [xX] hex_digits;
    octal_integer = "0" [0-7]+;
    u32_suffix = [uU];
+   long_suffix = [lL];
+   long_long_suffix = "ll" | "LL";
+   unsigned_long_suffix = [uU] [lL] | [lL] [uU];
+   unsigned_long_long_suffix =
+      [uU] ("ll" | "LL")
+      | ("ll" | "LL") [uU];
    hex_u32 = hex_integer u32_suffix;
    octal_u32 = octal_integer u32_suffix;
    decimal_u32 = ("0" | [1-9][0-9]*) u32_suffix;
+   hex_long = hex_integer long_suffix;
+   octal_long = octal_integer long_suffix;
+   decimal_long = ("0" | [1-9][0-9]*) long_suffix;
+   hex_long_long = hex_integer long_long_suffix;
+   octal_long_long = octal_integer long_long_suffix;
+   decimal_long_long = ("0" | [1-9][0-9]*) long_long_suffix;
+   hex_unsigned_long = hex_integer unsigned_long_suffix;
+   octal_unsigned_long = octal_integer unsigned_long_suffix;
+   decimal_unsigned_long =
+      ("0" | [1-9][0-9]*) unsigned_long_suffix;
+   hex_unsigned_long_long = hex_integer unsigned_long_long_suffix;
+   octal_unsigned_long_long = octal_integer unsigned_long_long_suffix;
+   decimal_unsigned_long_long =
+      ("0" | [1-9][0-9]*) unsigned_long_long_suffix;
    decimal_exponent = [eE][+-]? decimal_digits;
    decimal_float =
       (decimal_digits "." [0-9]* | "." decimal_digits) decimal_exponent?
@@ -483,6 +523,18 @@ int cm1_lexer_scan(struct cm1_lexer* l) {
    "|="                             { l->cursor = cursor; return CM1_TOKEN_OR_ASSIGN; }
    f32_num                          { l->cursor = cursor; return CM1_TOKEN_F32_NUM; }
    f64_num                          { l->cursor = cursor; return CM1_TOKEN_F64_NUM; }
+   hex_unsigned_long_long           { l->cursor = cursor; return CM1_C_TOKEN_ULLONG_LITERAL; }
+   octal_unsigned_long_long         { l->cursor = cursor; return CM1_C_TOKEN_ULLONG_LITERAL; }
+   decimal_unsigned_long_long       { l->cursor = cursor; return CM1_C_TOKEN_ULLONG_LITERAL; }
+   hex_long_long                    { l->cursor = cursor; return CM1_C_TOKEN_LLONG_LITERAL; }
+   octal_long_long                  { l->cursor = cursor; return CM1_C_TOKEN_LLONG_LITERAL; }
+   decimal_long_long                { l->cursor = cursor; return CM1_C_TOKEN_LLONG_LITERAL; }
+   hex_unsigned_long                { l->cursor = cursor; return CM1_C_TOKEN_ULONG_LITERAL; }
+   octal_unsigned_long              { l->cursor = cursor; return CM1_C_TOKEN_ULONG_LITERAL; }
+   decimal_unsigned_long            { l->cursor = cursor; return CM1_C_TOKEN_ULONG_LITERAL; }
+   hex_long                         { l->cursor = cursor; return CM1_C_TOKEN_LONG_LITERAL; }
+   octal_long                       { l->cursor = cursor; return CM1_C_TOKEN_LONG_LITERAL; }
+   decimal_long                     { l->cursor = cursor; return CM1_C_TOKEN_LONG_LITERAL; }
    hex_u32                          { l->cursor = cursor; return CM1_TOKEN_U32; }
    octal_u32                        { l->cursor = cursor; return CM1_TOKEN_U32; }
    decimal_u32                      { l->cursor = cursor; return CM1_TOKEN_U32; }

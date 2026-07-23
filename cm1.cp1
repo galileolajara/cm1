@@ -477,6 +477,34 @@ parse(in-path'char @const[]) {
             .last-token = t
             psr.parse(t, tok)
          }
+         case #i64 {
+            str' = lex.start
+            str-end'rdr. = ?
+            str-end.ref = lex.cursor
+            str-begin'rdr. = ?
+            str-begin.ref = lex.start
+            li'line-info. = ?
+            li.init(.input-path, tok.u64.row, tok.u64.col)
+            tok.u64.path = .input-path
+            tok.u64.id = cm1-i64-literal-value(
+               str, 'u32(str-end.pos - str-begin.pos), li)
+            .last-token = t
+            psr.parse(t, tok)
+         }
+         case #u64 {
+            str' = lex.start
+            str-end'rdr. = ?
+            str-end.ref = lex.cursor
+            str-begin'rdr. = ?
+            str-begin.ref = lex.start
+            li'line-info. = ?
+            li.init(.input-path, tok.u64.row, tok.u64.col)
+            tok.u64.path = .input-path
+            tok.u64.id = cm1-u64-literal-value(
+               str, 'u32(str-end.pos - str-begin.pos), li)
+            .last-token = t
+            psr.parse(t, tok)
+         }
          case #f32-num {
             tok.f32.f32 = parse-f32(lex.start)
             .last-token = t
@@ -644,6 +672,9 @@ bc-push-u64(val'u64) {
       bc-op(#push-u64)
       bc-n64(val)
    }
+}
+bc-push-i64(val'i64) {
+   bc-push-u64('u64(val))
 }
 bc-push-i32(val'i32) {
    if val == 0 {
@@ -1120,6 +1151,8 @@ export() {
    expr-call-arg(null)
    expr-i32(0, null)
    expr-u32(0, null)
+   expr-i64(0, null)
+   expr-u64(0, null)
    expr-f32('f32(0), null)
    expr-f64('f64(0), null)
    expr-string(null, 0, null)
@@ -1522,9 +1555,10 @@ cm1-string-hex-value(c'char)'i32 {
    if (&&, c >= ''A, c <= ''F) { return (c - ''A) + 10 }
    return -1
 }
-cm1-u32-literal-value(raw'char @const[], raw-len'u32, li'line-info)'u32 {
+cm1-integer-literal-value(raw'char @const[], raw-len'u32, limit'u64,
+   signedness'char @const[], type-name'char @const[], li'line-info)'u64 {
    if raw-len < 2 {
-      'c1.stdout{li ": Invalid unsigned integer literal\n"}
+      'c1.stdout{li ": Invalid " signedness " integer literal\n"}
       'c.exit(#failure)
    }
    base'u32 = 10
@@ -1536,22 +1570,37 @@ cm1-u32-literal-value(raw'char @const[], raw-len'u32, li'line-info)'u32 {
       base = 8
       start = 1
    }
-   end' = raw-len - 1
-   value'u32 = 0
-   loop i' = start; i < end; i++ {
+   value'u64 = 0
+   loop i' = start; i < raw-len; i++ {
       digit-i32' = cm1-string-hex-value(raw[i])
       if (||, digit-i32 < 0, 'u32(digit-i32) >= base) {
-         'c1.stdout{li ": Invalid unsigned integer literal\n"}
+         if (||, raw[i] == ''u, raw[i] == ''U,
+            raw[i] == ''l, raw[i] == ''L) {
+            break
+         }
+         'c1.stdout{li ": Invalid " signedness " integer literal\n"}
          'c.exit(#failure)
       }
-      digit' = 'u32(digit-i32)
-      if value > ((0xffffffff - digit) / base) {
-         'c1.stdout{li ": Unsigned integer literal exceeds uint32_t\n"}
+      digit' = 'u64(digit-i32)
+      if value > ((limit - digit) / base) {
+         'c1.stdout{li ": " signedness " integer literal exceeds " type-name "\n"}
          'c.exit(#failure)
       }
       value = (value * base) + digit
    }
    return value
+}
+cm1-u32-literal-value(raw'char @const[], raw-len'u32, li'line-info)'u32 {
+   return 'u32(cm1-integer-literal-value(
+      raw, raw-len, 4294967295u64, "Unsigned", "uint32_t", li))
+}
+cm1-i64-literal-value(raw'char @const[], raw-len'u32, li'line-info)'u64 {
+   return cm1-integer-literal-value(
+      raw, raw-len, 9223372036854775807u64, "Signed", "int64_t", li)
+}
+cm1-u64-literal-value(raw'char @const[], raw-len'u32, li'line-info)'u64 {
+   return cm1-integer-literal-value(
+      raw, raw-len, 18446744073709551615u64, "Unsigned", "uint64_t", li)
 }
 cm1-char-literal-error(li'line-info, message'char @const[]) {
    'c1.stdout{li ": " message "\n"}

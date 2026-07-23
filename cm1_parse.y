@@ -519,6 +519,16 @@ array_const_primary(out) ::= U32(i).
    ARRAY_CONST_LOCATION(out, i);
    out.u64.u64 = i.u64.u64;
 }
+array_const_primary(out) ::= I64(i).
+{
+   ARRAY_CONST_LOCATION(out, i);
+   out.u64.u64 = i.u64.u64;
+}
+array_const_primary(out) ::= U64(i).
+{
+   ARRAY_CONST_LOCATION(out, i);
+   out.u64.u64 = i.u64.u64;
+}
 array_const_primary(out) ::= SIZEOF LPAREN type(t) RPAREN.
 {
    ARRAY_CONST_LOCATION(out, t);
@@ -706,6 +716,12 @@ expr_i32(out) ::= I32(i).
 expr_u32(out) ::= U32(i).
 { out.ptr.ptr = _Tcm1_Fexpr_u32_2((uint32_t)i.u64.u64, PATH(i)); }
 
+expr_i64(out) ::= I64(i).
+{ out.ptr.ptr = _Tcm1_Fexpr_i64_2((int64_t)i.u64.u64, PATH(i)); }
+
+expr_u64(out) ::= U64(i).
+{ out.ptr.ptr = _Tcm1_Fexpr_u64_2(i.u64.u64, PATH(i)); }
+
 string_literals(out) ::= STRING(s).
 {
    out.u64.path = s.u64.path;
@@ -780,6 +796,12 @@ expr_single(out) ::= expr_i32(e).
 { out.ptr.ptr = e.ptr.ptr; }
 
 expr_single(out) ::= expr_u32(e).
+{ out.ptr.ptr = e.ptr.ptr; }
+
+expr_single(out) ::= expr_i64(e).
+{ out.ptr.ptr = e.ptr.ptr; }
+
+expr_single(out) ::= expr_u64(e).
 { out.ptr.ptr = e.ptr.ptr; }
 
 expr_single(out) ::= expr_string(e).

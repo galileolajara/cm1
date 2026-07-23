@@ -24,6 +24,16 @@ expr-u32(u32'u32, li'line-info)'expr {
    expr.u32 = u32
    return expr
 }
+expr-i64(i64'i64, li'line-info)'expr {
+   expr'expr-i64 = expr-alloc('expr-i64['usz], #i64, li)
+   expr.i64 = i64
+   return expr
+}
+expr-u64(u64'u64, li'line-info)'expr {
+   expr'expr-u64 = expr-alloc('expr-u64['usz], #u64, li)
+   expr.u64 = u64
+   return expr
+}
 expr-alloc(size'usz, type'expr-type, li'line-info)'ref {
    r'rdr. = ?
    r.ref = .cm1-data-mem
@@ -34,7 +44,7 @@ expr-alloc(size'usz, type'expr-type, li'line-info)'ref {
    expr.type = type
    return r.ref
 }
-enum 'expr-type[#none, #call, #i32, #u32, #assign, #math, #unary, #var, #field, #index, #inc-dec, #size-align, #cast, #logical, #f32, #f64, #conditional, #string]'u8 {
+enum 'expr-type[#none, #call, #i32, #u32, #i64, #u64, #assign, #math, #unary, #var, #field, #index, #inc-dec, #size-align, #cast, #logical, #f32, #f64, #conditional, #string]'u8 {
    cp1-name(e'this)'char @const[] @cp1-name
 }
 expr-call-fixed(func-name'id, arg-v'expr[], arg-c'u8, li'line-info)'expr {
@@ -69,6 +79,8 @@ expr-call(func-name'id, li'line-info)'expr {
 struct 'expr-call[base'expr., func'func, arg-c'u8, arg-v'expr[1]]
 struct 'expr-i32[base'expr., i32'i32]
 struct 'expr-u32[base'expr., u32'u32]
+struct 'expr-i64[base'expr., i64'i64]
+struct 'expr-u64[base'expr., u64'u64]
 // String expressions live outside cm1-data-mem so their bytecode operands can
 // be patched after the final string-pool position is known.
 #string-limit = 1024 * 1024
@@ -349,6 +361,12 @@ expr-is-zero(expr'expr)'bool {
    } elif expr.type == #u32 {
       integer'expr-u32 = expr
       return integer.u32 == 0
+   } elif expr.type == #i64 {
+      integer'expr-i64 = expr
+      return integer.i64 == 0
+   } elif expr.type == #u64 {
+      integer'expr-u64 = expr
+      return integer.u64 == 0
    }
    return false
 }
@@ -534,6 +552,20 @@ struct 'expr[info'line-info., type'expr-type] {
             out-stars-c = #0
             out-stars-bc = #0
             return .type-v[6]
+         }
+         case #i64 {
+            expr'expr-i64 = expr-base
+            bc-push-i64(expr.i64)
+            out-stars-c = #0
+            out-stars-bc = #0
+            return .type-v[7]
+         }
+         case #u64 {
+            expr'expr-u64 = expr-base
+            bc-push-u64(expr.u64)
+            out-stars-c = #0
+            out-stars-bc = #0
+            return .type-v[8]
          }
          case #string {
             expr'expr-string = expr-base
