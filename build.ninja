@@ -27,6 +27,9 @@ rule runrestat
 rule file-to-h
  command = xxd -i $in $out
 
+rule cp
+ command = cp $in $out
+
 # rule e
 #  deps = gcc
 #  depfile = $out.d
@@ -63,3 +66,4 @@ build out/stdio.h.h: file-to-h include/stdio.h
 build out/web-cm1.cp1.c: cp1 web-include.cp1 cm1-web.cp1 cm1.cp1 expr.cp1 print-error.cp1 space.cp1 func.cp1 | out/tokens.cp1
 build html/editor.js: emcc web_editor.c parse.c | out/web-cm1.cp1.c web_cm1.c out/stdio.h.h cm1_preprocess.c out/lex.c cm1_types/emscripten/cm1_types.h
  flags = -O3 --no-entry -sEXPORTED_FUNCTIONS=_compile,_execute,_io_mem,_io_limit -s ALLOW_MEMORY_GROWTH=0 -sEXPORTED_RUNTIME_METHODS=cwrap,HEAPU8 -sENVIRONMENT=web --preload-file include
+build bin/cm1: cp out/cm1

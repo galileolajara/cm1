@@ -226,9 +226,9 @@ void cm1_run(uint16_t func_idx) {
       uint64_t* old_ptr = (uint64_t*)cm1_stack_v[cm1_lvar_pos + lvar_idx].ptr;
       uint64_t* new_ptr = (uint64_t*)&cm1_stack_v[cm1_stack_pos];
       cm1_stack_v[cm1_lvar_pos + lvar_idx].ptr = new_ptr;
-      uint16_t size = *((uint16_t*)bc);
-      bc += sizeof(uint16_t);
-      for (uint16_t i = 0; i < size; i++) {
+      uint32_t size = *((uint32_t*)bc);
+      bc += sizeof(uint32_t);
+      for (uint32_t i = 0; i < size; i++) {
          new_ptr[i] = old_ptr[i];
       }
       #ifdef CM1_DEBUG_STACK_ALLOC
@@ -242,8 +242,8 @@ void cm1_run(uint16_t func_idx) {
       bc += sizeof(uint16_t);
       if (lvar_idx == 0xffff) break;
       cm1_stack_v[cm1_lvar_pos + lvar_idx].ptr = &cm1_stack_v[cm1_stack_pos];
-      uint16_t size = *((uint16_t*)bc);
-      bc += sizeof(uint16_t);
+      uint32_t size = *((uint32_t*)bc);
+      bc += sizeof(uint32_t);
       #ifdef CM1_DEBUG_STACK_ALLOC
       printf("Allocated %u bytes for local variable at index %u\n", size << 3, lvar_idx);
       #endif

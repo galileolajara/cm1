@@ -127,7 +127,7 @@ func-code-bc(space'space) {
       if lvar.stars-final == #0 {
          if type.is-aggregate() {
             bc-n8(i)
-            bc-n16((type.size + 7) >> 3) // How many 64-bits does the aggregate's memory consume?
+            bc-n32((type.size + 7) >> 3) // How many 64-bits does the aggregate's memory consume?
          }
       }
    }
@@ -138,11 +138,11 @@ func-code-bc(space'space) {
       type' = lvar.type-final
       if lvar.array-dim-c != 0 {
          bc-n16(i)
-         bc-n16((lvar.array-size + 7) >> 3)
+         bc-n32((lvar.array-size + 7) >> 3)
       } elif lvar.stars-final == #0 {
          if type.is-aggregate() {
             bc-n16(i)
-            bc-n16((type.size + 7) >> 3) // How many 64-bits does the aggregate's memory consume?
+            bc-n32((type.size + 7) >> 3) // How many 64-bits does the aggregate's memory consume?
          }
       }
    }
